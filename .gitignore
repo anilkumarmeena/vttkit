@@ -137,3 +137,6 @@ Thumbs.db
 *.vtt
 *.m3u8
 segments.json
+
+local/
+bin/

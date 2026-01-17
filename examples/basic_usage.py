@@ -15,7 +15,7 @@ def main():
     print("Downloading VTT file...")
     vtt_path = downloader.download(
         url="https://example.com/subtitles.vtt",
-        output_dir="/tmp/vtt"
+        output_dir="local/vtt"
     )
     print(f"Downloaded to: {vtt_path}")
     

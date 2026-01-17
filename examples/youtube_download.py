@@ -18,7 +18,7 @@ def main():
     print(f"Downloading subtitles from YouTube...")
     vtt_path = downloader.download(
         url=youtube_url,
-        output_dir="/tmp/youtube_vtt",
+        output_dir="local/youtube_vtt",
         is_youtube=True,
         stream_url=youtube_url  # Required for yt-dlp
     )

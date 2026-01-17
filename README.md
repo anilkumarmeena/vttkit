@@ -37,7 +37,7 @@ from vttkit import VTTDownloader, VTTParser
 downloader = VTTDownloader()
 vtt_path = downloader.download(
     url="https://example.com/subtitles.vtt",
-    output_dir="/tmp/vtt"
+    output_dir="local/vtt"
 )
 
 # Parse to segments.json
@@ -59,7 +59,7 @@ from vttkit import VTTDownloader, VTTParser
 downloader = VTTDownloader()
 vtt_path = downloader.download(
     url="https://youtube.com/watch?v=VIDEO_ID",
-    output_dir="/tmp/vtt",
+    output_dir="local/vtt",
     is_youtube=True,
     stream_url="https://youtube.com/watch?v=VIDEO_ID"
 )
@@ -82,7 +82,7 @@ m3u8_info = extract_m3u8_info("https://example.com/playlist.m3u8")
 downloader = VTTDownloader()
 vtt_path = downloader.download(
     url="https://youtube.com/watch?v=LIVE_ID",
-    output_dir="/tmp/live",
+    output_dir="local/live",
     is_youtube=True,
     append_mode=True,  # Merge with existing
     stream_url="https://youtube.com/watch?v=LIVE_ID"

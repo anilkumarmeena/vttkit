@@ -18,7 +18,7 @@ Example usage:
     >>> downloader = VTTDownloader()
     >>> vtt_path = downloader.download(
     ...     url="https://youtube.com/watch?v=VIDEO_ID",
-    ...     output_dir="/tmp/vtt",
+    ...     output_dir="local/vtt",
     ...     is_youtube=True
     ... )
     >>> 
@@ -47,9 +47,9 @@ from .core import (
 )
 
 # Main classes
-from .downloader import VTTDownloader, download_vtt
+from .downloader import VTTDownloader, download_vtt, is_hls_playlist, download_vtt_segments_from_hls
 from .parser import VTTParser, parse_vtt_to_segments
-from .merger import VTTMerger, parse_vtt_cues, deduplicate_cues, merge_vtt_content
+from .merger import VTTMerger, parse_vtt_cues, deduplicate_cues, merge_vtt_content, format_vtt_from_cues
 from .corrector import (
     VTTTimestampCorrector,
     calculate_timestamp_offset,
@@ -63,7 +63,6 @@ from .models import VTTCue, VTTWord, VTTSegment, DownloadConfig, M3U8Info
 
 # YouTube utilities
 from .youtube import (
-    YouTubeClient,
     is_youtube_url,
     extract_youtube_id,
     download_youtube_subtitles,
@@ -95,7 +94,6 @@ __all__ = [
     "VTTParser",
     "VTTMerger",
     "VTTTimestampCorrector",
-    "YouTubeClient",
     
     # Convenience functions
     "download_vtt",
@@ -103,6 +101,9 @@ __all__ = [
     "parse_vtt_cues",
     "deduplicate_cues",
     "merge_vtt_content",
+    "format_vtt_from_cues",
+    "is_hls_playlist",
+    "download_vtt_segments_from_hls",
     "calculate_timestamp_offset",
     "add_seconds_to_timestamp",
     "apply_offset_to_cues",
