@@ -40,21 +40,29 @@ __license__ = "MIT"
 # Users should configure logging in their application if they want to see logs
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
-# Core parsing functions
-from .core import (
-    parse_vtt_content,
-    parse_vtt,
+# Core utility functions
+from .utils import (
     timestamp_to_seconds,
     seconds_to_timestamp,
-    format_transcript_with_timestamps,
+)
+
+# VTT utility functions (from vtt_json)
+from .vtt_json.converter import (
     clean_vtt_content,
     split_long_cues,
     build_cues_from_words,
 )
 
+# VTT to JSON conversion (from vtt_json package)
+from .vtt_json import (
+    parse_vtt_content,
+    parse_vtt,
+    format_transcript_with_timestamps,
+    VTTParser,
+)
+
 # Main classes
-from .downloader import VTTDownloader, download_vtt, is_hls_playlist, download_vtt_segments_from_hls
-from .parser import VTTParser, parse_vtt_to_segments
+from .downloader import VTTDownloader, is_hls_playlist, download_vtt_segments_from_hls
 from .merger import VTTMerger, parse_vtt_cues, deduplicate_cues, merge_vtt_content, format_vtt_from_cues
 from .corrector import (
     VTTTimestampCorrector,
@@ -71,9 +79,7 @@ from .models import VTTCue, VTTWord, VTTSegment, DownloadConfig, M3U8Info
 from .youtube import (
     is_youtube_url,
     extract_youtube_id,
-    download_youtube_subtitles,
-    extract_youtube_live_info,
-    refresh_youtube_vtt_url,
+    YouTubeClient,
     extract_m3u8_info,
     extract_m3u8_program_date_time,
     is_m3u8_url,
@@ -100,10 +106,9 @@ __all__ = [
     "VTTParser",
     "VTTMerger",
     "VTTTimestampCorrector",
+    "YouTubeClient",
     
-    # Convenience functions
-    "download_vtt",
-    "parse_vtt_to_segments",
+    # Utility functions
     "parse_vtt_cues",
     "deduplicate_cues",
     "merge_vtt_content",
@@ -125,9 +130,6 @@ __all__ = [
     # YouTube utilities
     "is_youtube_url",
     "extract_youtube_id",
-    "download_youtube_subtitles",
-    "extract_youtube_live_info",
-    "refresh_youtube_vtt_url",
     "extract_m3u8_info",
     "extract_m3u8_program_date_time",
     "is_m3u8_url",

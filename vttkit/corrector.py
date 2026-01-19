@@ -9,7 +9,7 @@ corrected based on M3U8 playlist metadata.
 import logging
 from typing import Dict, Any, Optional, List, Tuple
 
-from .core import timestamp_to_seconds, seconds_to_timestamp
+from .utils import timestamp_to_seconds, seconds_to_timestamp
 
 logger = logging.getLogger(__name__)
 

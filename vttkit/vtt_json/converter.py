@@ -1,41 +1,28 @@
 """
-Core VTT parsing functionality.
+VTT content parsing and conversion utilities.
 
-This module provides the foundational VTT (WebVTT) parsing capabilities including:
-- Timestamp conversion utilities
-- VTT content cleaning and validation
-- Word-level timestamp extraction
-- Cue splitting and building
-- Format conversion
-
-Originally from short-generator pkg/subtitles/vtt.py
+Provides core VTT parsing functionality for converting VTT format to structured
+data with word-level timestamps. This module focuses on low-level VTT parsing
+operations and includes all VTT-specific utility functions.
 """
 
 import re
-import json
-import os
 from itertools import groupby
 
-
-def timestamp_to_seconds(timestamp):
-    """Convert HH:MM:SS.mmm format to seconds"""
-    h, m, s = timestamp.split(':')
-    seconds = int(h) * 3600 + int(m) * 60 + float(s)
-    return seconds
+from ..utils import timestamp_to_seconds, seconds_to_timestamp
 
 
-def seconds_to_timestamp(seconds):
-    """Convert seconds to HH:MM:SS.mmm format"""
-    hours = int(seconds / 3600)
-    minutes = int((seconds % 3600) / 60)
-    seconds_remainder = seconds % 60
-    milliseconds = int((seconds_remainder - int(seconds_remainder)) * 1000)
+def resolve_inner_timestamp(tag_timestamp: str, base_seconds: float) -> str:
+    """
+    Resolve cue-relative timestamps to absolute timestamps.
     
-    return f"{hours:02d}:{minutes:02d}:{int(seconds_remainder):02d}.{milliseconds:03d}"
-
-
-def resolve_inner_timestamp(tag_timestamp, base_seconds):
-    """Resolve cue-relative timestamps to absolute timestamps."""
+    Args:
+        tag_timestamp: Relative timestamp within a cue
+        base_seconds: Base time in seconds to add to
+        
+    Returns:
+        Absolute timestamp string in HH:MM:SS.mmm format
+    """
     tag_seconds = timestamp_to_seconds(tag_timestamp)
     return seconds_to_timestamp(base_seconds + tag_seconds)
 
@@ -65,7 +52,7 @@ def calculate_middle_timestamp(syllable_list):
     return seconds_to_timestamp(middle_seconds)
 
 
-def clean_vtt_content(content):
+def clean_vtt_content(content: str) -> str:
     """
     Clean a VTT content by keeping only timestamp lines and formatted content lines.
     Removes consecutive timestamp entries and empty timestamp entries.
@@ -115,7 +102,16 @@ def clean_vtt_content(content):
 
 
 def split_long_cues(cues, max_duration=2.0):
-    """Split cues that are longer than max_duration seconds"""
+    """
+    Split cues that are longer than max_duration seconds.
+    
+    Args:
+        cues: List of cue dictionaries
+        max_duration: Maximum duration in seconds for each cue
+        
+    Returns:
+        List of cues with long cues split into shorter ones
+    """
     new_cues = []
     
     for cue in cues:
@@ -224,7 +220,16 @@ def split_long_cues(cues, max_duration=2.0):
 
 
 def build_cues_from_words(words, max_cue_duration=2.0):
-    """Build cues from a word-level list using a max duration window."""
+    """
+    Build cues from a word-level list using a max duration window.
+    
+    Args:
+        words: List of word dictionaries with 'word' and 'time' keys
+        max_cue_duration: Maximum duration in seconds for each cue
+        
+    Returns:
+        List of cue dictionaries built from words
+    """
     if not words:
         return []
 

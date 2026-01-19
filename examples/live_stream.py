@@ -9,8 +9,8 @@ VTT file with deduplication.
 
 import logging
 
-from vttkit import VTTDownloader, VTTParser
-from vttkit.youtube import extract_m3u8_info, extract_youtube_live_info
+from vttkit import VTTDownloader, VTTParser, YouTubeClient
+from vttkit.youtube import extract_m3u8_info
 
 # Configure logging to see vttkit internal logs
 logging.basicConfig(
@@ -20,20 +20,21 @@ logging.basicConfig(
 
 def main():
     # YouTube live stream URL
-    live_url = "https://www.youtube.com/watch?v=7doh6cP2EIQ"
+    live_url = "https://www.youtube.com/watch?v=raa4Pz1AP9s"
     
     # VTT URL (optional - will be auto-extracted from YouTube if not provided)
     vtt_url = None  # Set to None to auto-extract, or provide the M3U8 URL directly
     
-    # Initialize downloader and parser
+    # Initialize clients
     downloader = VTTDownloader()
     parser = VTTParser()
+    youtube_client = YouTubeClient()
     
     # Auto-extract VTT URL from YouTube if not provided
     if vtt_url is None:
         print("VTT URL not provided, extracting from YouTube...")
         try:
-            live_info = extract_youtube_live_info(live_url)
+            live_info = youtube_client.extract_live_info(live_url)
             vtt_url = live_info.get('vtt_url')
             
             if vtt_url:

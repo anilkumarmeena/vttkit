@@ -323,31 +323,3 @@ class VTTDownloader:
         """
         vtt_path = self.get_vtt_path(output_dir, stream_id)
         return os.path.exists(vtt_path)
-
-
-# Convenience function for backward compatibility
-def download_vtt(
-    url: str,
-    output_dir: str,
-    stream_id: Optional[str] = None,
-    is_youtube: bool = False,
-    append_mode: bool = False,
-    stream_url: Optional[str] = None,
-    youtube_cookies_path: Optional[str] = None,
-    m3u8_info: Optional[dict] = None
-) -> str:
-    """
-    Download VTT file. Convenience function wrapping VTTDownloader.
-    
-    See VTTDownloader.download() for parameter documentation.
-    """
-    downloader = VTTDownloader(youtube_cookies_path=youtube_cookies_path)
-    return downloader.download(
-        url=url,
-        output_dir=output_dir,
-        stream_id=stream_id,
-        is_youtube=is_youtube,
-        append_mode=append_mode,
-        stream_url=stream_url,
-        m3u8_info=m3u8_info
-    )

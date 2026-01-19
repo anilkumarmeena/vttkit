@@ -1,5 +1,5 @@
 """
-VTT parser for VTTKit.
+VTT parser for segments.json generation.
 
 Orchestrates the complete VTT parsing pipeline from VTT file to segments.json format.
 Applies timestamp corrections for YouTube live streams and outputs structured data
@@ -10,8 +10,8 @@ import json
 import logging
 from typing import Dict, Any, Optional
 
-from .core import parse_vtt_content
-from .corrector import VTTTimestampCorrector
+from .converter import parse_vtt_content
+from ..corrector import VTTTimestampCorrector
 
 logger = logging.getLogger(__name__)
 
@@ -183,24 +183,3 @@ class VTTParser:
             "header": header,
             "cues": cues
         }
-
-
-# Convenience function for backward compatibility
-def parse_vtt_to_segments(
-    vtt_file: str,
-    output_file: str = "segments.json",
-    m3u8_info: Optional[Dict[str, Any]] = None,
-    is_youtube: bool = False
-) -> Dict[str, Any]:
-    """
-    Parse VTT file to segments.json. Convenience function wrapping VTTParser.
-    
-    See VTTParser.parse_to_segments() for parameter documentation.
-    """
-    parser = VTTParser()
-    return parser.parse_to_segments(
-        vtt_file=vtt_file,
-        output_file=output_file,
-        m3u8_info=m3u8_info,
-        is_youtube=is_youtube
-    )

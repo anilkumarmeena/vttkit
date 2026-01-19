@@ -289,22 +289,3 @@ class YouTubeClient:
         except Exception as e:
             logger.error(f"Failed to refresh VTT URL: {str(e)}")
             return None
-
-
-# Convenience functions for backward compatibility
-def download_youtube_subtitles(url: str, output_dir: str, cookies_path: Optional[str] = None) -> Optional[str]:
-    """Download YouTube subtitles. Convenience function wrapping YouTubeClient."""
-    client = YouTubeClient(cookies_path=cookies_path)
-    return client.download_subtitles(url, output_dir)
-
-
-def extract_youtube_live_info(url: str, cookies_path: Optional[str] = None) -> Dict:
-    """Extract YouTube live stream info. Convenience function wrapping YouTubeClient."""
-    client = YouTubeClient(cookies_path=cookies_path)
-    return client.extract_live_info(url)
-
-
-def refresh_youtube_vtt_url(url: str, cookies_path: Optional[str] = None) -> Optional[str]:
-    """Refresh YouTube VTT URL. Convenience function wrapping YouTubeClient."""
-    client = YouTubeClient(cookies_path=cookies_path)
-    return client.refresh_vtt_url(url)
