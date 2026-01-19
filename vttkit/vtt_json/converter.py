@@ -8,11 +8,22 @@ operations and includes all VTT-specific utility functions.
 
 import re
 from itertools import groupby
+from typing import Dict, List, Optional, Any, Tuple
 
 from ..utils import timestamp_to_seconds, seconds_to_timestamp
 
+# Constants
+DEFAULT_MAX_CUE_DURATION = 2.0
+TIMESTAMP_ALIGNMENT_TOLERANCE = 0.05  # seconds
 
-def resolve_inner_timestamp(tag_timestamp: str, base_seconds: float) -> str:
+# Pre-compiled regex patterns for performance
+_TIMESTAMP_PATTERN = re.compile(r'(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})')
+_CONTENT_PATTERN = re.compile(r'.*<\d{2}:\d{2}:\d{2}\.\d{3}>.*')
+_TAG_PATTERN = re.compile(r'<(\d{2}:\d{2}:\d{2}\.\d{3})><c>([^<]*)</c>')
+_CLEAN_TEXT_PATTERN = re.compile(r'<\d{2}:\d{2}:\d{2}\.\d{3}>|</?c>')
+
+
+def _resolve_inner_timestamp(tag_timestamp: str, base_seconds: float) -> str:
     """
     Resolve cue-relative timestamps to absolute timestamps.
     
@@ -27,7 +38,7 @@ def resolve_inner_timestamp(tag_timestamp: str, base_seconds: float) -> str:
     return seconds_to_timestamp(base_seconds + tag_seconds)
 
 
-def calculate_middle_timestamp(syllable_list):
+def _calculate_middle_timestamp(syllable_list: List[Tuple[str, str]]) -> str:
     """
     Calculate middle timestamp from list of (timestamp, text) tuples.
     
@@ -62,19 +73,21 @@ def clean_vtt_content(content: str) -> str:
         
     Returns:
         Cleaned VTT content as string
+        
+    Raises:
+        ValueError: If content is empty or invalid
     """
-    # Regular expressions to match timestamp lines and content lines with formatting
-    timestamp_pattern = re.compile(r'\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}')
-    content_pattern = re.compile(r'.*<\d{2}:\d{2}:\d{2}\.\d{3}>.*')
+    if not content or not content.strip():
+        raise ValueError("VTT content cannot be empty")
     
     # Split content into lines
     lines = content.strip().split('\n')
     
-    # First pass: extract all timestamp and content lines
+    # First pass: extract all timestamp and content lines using pre-compiled patterns
     filtered_lines = []
     for line in lines:
         line = line.strip()
-        if timestamp_pattern.match(line) or content_pattern.search(line):
+        if _TIMESTAMP_PATTERN.match(line) or _CONTENT_PATTERN.search(line):
             filtered_lines.append(line)
     
     # Second pass: remove consecutive timestamps and empty timestamp entries
@@ -84,9 +97,9 @@ def clean_vtt_content(content: str) -> str:
         current_line = filtered_lines[i]
         
         # If current line is a timestamp
-        if timestamp_pattern.match(current_line):
+        if _TIMESTAMP_PATTERN.match(current_line):
             # Check if there's a next line and it's not another timestamp
-            if i+1 < len(filtered_lines) and not timestamp_pattern.match(filtered_lines[i+1]):
+            if i+1 < len(filtered_lines) and not _TIMESTAMP_PATTERN.match(filtered_lines[i+1]):
                 cleaned_lines.append(current_line)
                 cleaned_lines.append(filtered_lines[i+1])
                 i += 2
@@ -101,7 +114,7 @@ def clean_vtt_content(content: str) -> str:
     return "WEBVTT\n\n" + "\n\n".join([f"{cleaned_lines[i]}\n{cleaned_lines[i+1]}" for i in range(0, len(cleaned_lines), 2)])
 
 
-def split_long_cues(cues, max_duration=2.0):
+def split_long_cues(cues: List[Dict[str, Any]], max_duration: float = DEFAULT_MAX_CUE_DURATION) -> List[Dict[str, Any]]:
     """
     Split cues that are longer than max_duration seconds.
     
@@ -124,16 +137,18 @@ def split_long_cues(cues, max_duration=2.0):
             new_cues.append(cue)
             continue
         
-        # Sort words by timestamp
-        words = sorted(cue['words'], key=lambda w: timestamp_to_seconds(w['time']))
+        # Sort words by timestamp - cache the conversion in a dict
+        word_times = {id(w): timestamp_to_seconds(w['time']) for w in cue['words']}
+        words = sorted(cue['words'], key=lambda w: word_times[id(w)])
         
         # Group words by exact same timestamp
         word_groups = []
         for timestamp, group in groupby(words, key=lambda w: w['time']):
             word_group = list(group)
+            timestamp_seconds = timestamp_to_seconds(timestamp)
             word_groups.append({
                 'timestamp': timestamp,
-                'timestamp_seconds': timestamp_to_seconds(timestamp),
+                'timestamp_seconds': timestamp_seconds,
                 'words': word_group
             })
         
@@ -147,12 +162,13 @@ def split_long_cues(cues, max_duration=2.0):
                 chunk_end = min(start_time + ((i + 1) * chunk_duration), end_time)
                 
                 # Create new cue
+                # Use cached word_times for filtering
+                chunk_words = [w for w in words if chunk_start <= word_times[id(w)] < chunk_end]
                 new_cue = {
                     'start_time': seconds_to_timestamp(chunk_start),
                     'end_time': seconds_to_timestamp(chunk_end),
                     'text': cue['text'],
-                    'words': [w for w in words if timestamp_to_seconds(w['time']) >= chunk_start and 
-                              timestamp_to_seconds(w['time']) < chunk_end]
+                    'words': chunk_words
                 }
                 new_cues.append(new_cue)
         else:
@@ -219,7 +235,7 @@ def split_long_cues(cues, max_duration=2.0):
     return new_cues
 
 
-def build_cues_from_words(words, max_cue_duration=2.0):
+def build_cues_from_words(words: List[Dict[str, Any]], max_cue_duration: float = DEFAULT_MAX_CUE_DURATION) -> List[Dict[str, Any]]:
     """
     Build cues from a word-level list using a max duration window.
     
@@ -233,16 +249,16 @@ def build_cues_from_words(words, max_cue_duration=2.0):
     if not words:
         return []
 
-    indexed_words = list(enumerate(words))
-    indexed_words.sort(key=lambda item: (timestamp_to_seconds(item[1]["time"]), item[0]))
+    # Cache timestamp conversions and sort with stable index
+    word_times = [(timestamp_to_seconds(w["time"]), i, w) for i, w in enumerate(words)]
+    word_times.sort(key=lambda item: (item[0], item[1]))
 
     cues = []
     current_words = []
     segment_start = None
     segment_end = None
 
-    for _, word in indexed_words:
-        word_time = timestamp_to_seconds(word["time"])
+    for word_time, _, word in word_times:
         if segment_start is None:
             segment_start = word_time
             segment_end = word_time
@@ -274,11 +290,177 @@ def build_cues_from_words(words, max_cue_duration=2.0):
     return cues
 
 
-def parse_vtt_content(vtt_content, max_cue_duration=2.0, clean_content=True, rebuild_cues_from_words=False):
-    """Parse VTT content and ensure cues are under max_cue_duration seconds.
-
-    If rebuild_cues_from_words is True, cues are rebuilt from word-level timestamps.
+def _extract_header(header_lines: List[str]) -> Dict[str, str]:
     """
+    Extract header metadata from VTT header lines.
+    
+    Args:
+        header_lines: List of header lines (after WEBVTT)
+        
+    Returns:
+        Dictionary of header key-value pairs
+    """
+    header = {}
+    for line in header_lines[1:]:  # Skip "WEBVTT" line
+        if ': ' in line:
+            key, value = line.split(': ', 1)
+            header[key] = value
+    return header
+
+
+def _clean_text(text: str) -> str:
+    """
+    Remove all VTT formatting tags from text.
+    
+    Args:
+        text: Text with VTT tags
+        
+    Returns:
+        Clean text without tags
+    """
+    return _CLEAN_TEXT_PATTERN.sub('', text)
+
+
+def _parse_word_timestamps(
+    text_content: str,
+    cue_start_seconds: float,
+    cue_end_seconds: float,
+    start_time: str,
+    rebuild_cues_from_words: bool,
+    has_emitted_words: bool
+) -> List[Dict[str, str]]:
+    """
+    Extract word-level timestamps from VTT text content.
+    
+    Args:
+        text_content: VTT text with timestamp tags
+        cue_start_seconds: Cue start time in seconds
+        cue_end_seconds: Cue end time in seconds
+        start_time: Cue start timestamp string
+        rebuild_cues_from_words: Whether rebuilding cues from words
+        has_emitted_words: Whether words have been emitted previously
+        
+    Returns:
+        List of word dictionaries with 'word' and 'time' keys
+    """
+    words_with_timestamps = []
+    syllables_in_word = []
+    matches = list(_TAG_PATTERN.finditer(text_content))
+    
+    def finalize_word():
+        if not syllables_in_word:
+            return
+        word_text = ''.join([s[1] for s in syllables_in_word]).strip()
+        if word_text:
+            middle_timestamp = _calculate_middle_timestamp(syllables_in_word)
+            words_with_timestamps.append({
+                "word": word_text,
+                "time": middle_timestamp
+            })
+    
+    inner_base_seconds = cue_start_seconds
+    if matches:
+        first_tag_text = matches[0].group(2)
+        first_tag_seconds = timestamp_to_seconds(matches[0].group(1))
+        
+        if rebuild_cues_from_words:
+            # Align the first inner timestamp to the cue start for incremental updates
+            inner_base_seconds = cue_start_seconds - first_tag_seconds
+        else:
+            cue_duration = max(0.0, cue_end_seconds - cue_start_seconds)
+            if first_tag_seconds > cue_duration + TIMESTAMP_ALIGNMENT_TOLERANCE:
+                inner_base_seconds = cue_start_seconds - first_tag_seconds
+        
+        text_before_first_tag = text_content[:matches[0].start()]
+        text_before_first_tag = text_before_first_tag.replace("\n", " ").rstrip()
+        include_prefix_words = not rebuild_cues_from_words or not has_emitted_words
+        
+        if text_before_first_tag:
+            prefix_tokens = text_before_first_tag.split()
+            if prefix_tokens:
+                if first_tag_text.startswith(' '):
+                    if include_prefix_words:
+                        for word in prefix_tokens:
+                            words_with_timestamps.append({
+                                "word": word,
+                                "time": start_time
+                            })
+                else:
+                    if include_prefix_words and len(prefix_tokens) > 1:
+                        for word in prefix_tokens[:-1]:
+                            words_with_timestamps.append({
+                                "word": word,
+                                "time": start_time
+                            })
+                    syllables_in_word = [(start_time, prefix_tokens[-1])]
+        
+        # Process all timestamp + text pairs
+        for match in matches:
+            timestamp = match.group(1)
+            text = match.group(2)
+            resolved_timestamp = _resolve_inner_timestamp(
+                timestamp,
+                inner_base_seconds,
+            )
+            
+            has_leading_space = text.startswith(' ')
+            has_trailing_space = text.endswith(' ')
+            
+            if has_leading_space:
+                finalize_word()
+                syllables_in_word = []
+                text = text.lstrip()
+            
+            if text:
+                syllables_in_word.append((resolved_timestamp, text))
+            
+            if has_trailing_space:
+                finalize_word()
+                syllables_in_word = []
+        
+        # Add the last word if exists
+        finalize_word()
+    
+    # Fallback: if no words extracted, split clean text by spaces
+    if not words_with_timestamps:
+        clean_text = _clean_text(text_content)
+        for word in clean_text.strip().split():
+            words_with_timestamps.append({
+                "word": word,
+                "time": start_time
+            })
+    
+    return words_with_timestamps
+
+
+def parse_vtt_content(
+    vtt_content: str,
+    max_cue_duration: float = DEFAULT_MAX_CUE_DURATION,
+    clean_content: bool = True,
+    rebuild_cues_from_words: bool = False
+) -> Dict[str, Any]:
+    """
+    Parse VTT content and ensure cues are under max_cue_duration seconds.
+    
+    Args:
+        vtt_content: VTT file content as string
+        max_cue_duration: Maximum duration in seconds for each cue
+        clean_content: Whether to clean VTT content before parsing
+        rebuild_cues_from_words: If True, cues are rebuilt from word-level timestamps
+        
+    Returns:
+        Dictionary with 'header' and 'cues' keys
+        
+    Raises:
+        ValueError: If VTT content is empty or invalid format
+    """
+    # Validate input
+    if not vtt_content or not vtt_content.strip():
+        raise ValueError("VTT content cannot be empty")
+    
+    if not vtt_content.strip().startswith("WEBVTT"):
+        raise ValueError("Invalid VTT format: must start with 'WEBVTT'")
+    
     # Clean the VTT content if requested
     if clean_content:
         vtt_content = clean_vtt_content(vtt_content)
@@ -286,19 +468,15 @@ def parse_vtt_content(vtt_content, max_cue_duration=2.0, clean_content=True, reb
     # Split the content by empty lines to separate header and cues
     blocks = vtt_content.strip().split("\n\n")
     
-    # Extract header
-    header = {}
+    # Extract header using helper function
     header_lines = blocks[0].split("\n")
-    # First line is always WEBVTT
-    for line in header_lines[1:]:
-        if ': ' in line:
-            key, value = line.split(': ', 1)
-            header[key] = value
+    header = _extract_header(header_lines)
     
     # Extract cues
     cues = []
     all_words = []
     has_emitted_words = False
+    
     for block in blocks[1:]:
         if not block.strip():
             continue
@@ -311,16 +489,16 @@ def parse_vtt_content(vtt_content, max_cue_duration=2.0, clean_content=True, reb
         timestamp_line = lines[0]
         
         # Check if the first line is a timestamp, otherwise it's an identifier
-        timestamp_pattern = r'(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})'
-        timestamp_match = re.search(timestamp_pattern, timestamp_line)
+        timestamp_match = _TIMESTAMP_PATTERN.search(timestamp_line)
         
         if timestamp_match:
             timestamp_index = 0
         else:
             # The first line is an identifier, the second line has the timestamp
             timestamp_index = 1
-            timestamp_line = lines[1]
-            timestamp_match = re.search(timestamp_pattern, timestamp_line)
+            if len(lines) > 1:
+                timestamp_line = lines[1]
+                timestamp_match = _TIMESTAMP_PATTERN.search(timestamp_line)
         
         if not timestamp_match:
             continue
@@ -334,107 +512,21 @@ def parse_vtt_content(vtt_content, max_cue_duration=2.0, clean_content=True, reb
         text_lines = lines[timestamp_index+1:]
         text_content = ' '.join(text_lines)
         
-        # Extract word-level timestamps by grouping syllables
-        # Word boundaries are detected by spaces in <c> tags
-
-        # Pattern to match timestamp and text in <c> tags
-        # Matches: <HH:MM:SS.mmm><c>text</c>
-        pattern = r'<(\d{2}:\d{2}:\d{2}\.\d{3})><c>([^<]*)</c>'
-
-        words_with_timestamps = []
-        syllables_in_word = []
-        matches = list(re.finditer(pattern, text_content))
-
-        def finalize_word():
-            if not syllables_in_word:
-                return
-            word_text = ''.join([s[1] for s in syllables_in_word]).strip()
-            if word_text:
-                middle_timestamp = calculate_middle_timestamp(syllables_in_word)
-                words_with_timestamps.append({
-                    "word": word_text,
-                    "time": middle_timestamp
-                })
-
-        inner_base_seconds = cue_start_seconds
-        if matches:
-            first_tag_text = matches[0].group(2)
-            first_tag_seconds = timestamp_to_seconds(matches[0].group(1))
-            if rebuild_cues_from_words:
-                # Align the first inner timestamp to the cue start for incremental updates.
-                inner_base_seconds = cue_start_seconds - first_tag_seconds
-            else:
-                cue_duration = max(0.0, cue_end_seconds - cue_start_seconds)
-                if first_tag_seconds > cue_duration + 0.05:
-                    inner_base_seconds = cue_start_seconds - first_tag_seconds
-
-            text_before_first_tag = text_content[:matches[0].start()]
-            text_before_first_tag = text_before_first_tag.replace("\n", " ").rstrip()
-            include_prefix_words = not rebuild_cues_from_words or not has_emitted_words
-
-            if text_before_first_tag:
-                prefix_tokens = text_before_first_tag.split()
-                if prefix_tokens:
-                    if first_tag_text.startswith(' '):
-                        if include_prefix_words:
-                            for word in prefix_tokens:
-                                words_with_timestamps.append({
-                                    "word": word,
-                                    "time": start_time
-                                })
-                    else:
-                        if include_prefix_words and len(prefix_tokens) > 1:
-                            for word in prefix_tokens[:-1]:
-                                words_with_timestamps.append({
-                                    "word": word,
-                                    "time": start_time
-                                })
-                        syllables_in_word = [(start_time, prefix_tokens[-1])]
-
-            # Process all timestamp + text pairs
-            for match in matches:
-                timestamp = match.group(1)
-                text = match.group(2)
-                resolved_timestamp = resolve_inner_timestamp(
-                    timestamp,
-                    inner_base_seconds,
-                )
-
-                has_leading_space = text.startswith(' ')
-                has_trailing_space = text.endswith(' ')
-
-                if has_leading_space:
-                    finalize_word()
-                    syllables_in_word = []
-                    text = text.lstrip()
-
-                if text:
-                    syllables_in_word.append((resolved_timestamp, text))
-
-                if has_trailing_space:
-                    finalize_word()
-                    syllables_in_word = []
-
-            # Add the last word if exists
-            finalize_word()
-            syllables_in_word = []
-        
-        # Fallback: if no words extracted, split clean text by spaces
-        if not words_with_timestamps:
-            clean_text = re.sub(r'<\d{2}:\d{2}:\d{2}\.\d{3}>', '', text_content)
-            clean_text = re.sub(r'<c>(.*?)</c>', r'\1', clean_text)
-            for word in clean_text.strip().split():
-                words_with_timestamps.append({
-                    "word": word,
-                    "time": start_time
-                })
+        # Extract word-level timestamps using helper function
+        words_with_timestamps = _parse_word_timestamps(
+            text_content,
+            cue_start_seconds,
+            cue_end_seconds,
+            start_time,
+            rebuild_cues_from_words,
+            has_emitted_words
+        )
 
         if words_with_timestamps:
             has_emitted_words = True
                 
         # Clean text (remove all tags)
-        clean_text = re.sub(r'<\d{2}:\d{2}:\d{2}\.\d{3}>', '', text_content)
-        clean_text = re.sub(r'<c>(.*?)</c>', r'\1', clean_text)
+        clean_text = _clean_text(text_content)
         
         if rebuild_cues_from_words:
             all_words.extend(words_with_timestamps)
@@ -459,7 +551,7 @@ def parse_vtt_content(vtt_content, max_cue_duration=2.0, clean_content=True, reb
     }
 
 
-def format_transcript_with_timestamps(cues):
+def format_transcript_with_timestamps(cues: List[Dict[str, Any]]) -> str:
     """
     Format transcript with human-readable timestamps in [HH:MM:SS] format.
     
@@ -479,7 +571,7 @@ def format_transcript_with_timestamps(cues):
     return "\n".join(formatted_lines)
 
 
-def parse_vtt(vtt_file_path, max_cue_duration=2.0):
+def parse_vtt(vtt_file_path: str, max_cue_duration: float = DEFAULT_MAX_CUE_DURATION) -> Tuple[str, Dict[str, Any]]:
     """
     Parse a VTT file and return both the formatted transcript and the structured data.
     
@@ -489,6 +581,10 @@ def parse_vtt(vtt_file_path, max_cue_duration=2.0):
         
     Returns:
         A tuple of (formatted transcript string, structured VTT data)
+        
+    Raises:
+        FileNotFoundError: If VTT file does not exist
+        ValueError: If VTT file is empty or invalid format
     """
     with open(vtt_file_path, 'r', encoding='utf-8') as f:
         vtt_content = f.read()

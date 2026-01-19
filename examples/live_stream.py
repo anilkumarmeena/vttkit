@@ -99,9 +99,7 @@ def main():
     segments_output = vtt_path.replace('.vtt', '_segments.json')
     result = parser.parse_to_segments(
         vtt_file=vtt_path,
-        output_file=segments_output,
-        is_youtube=True,
-        m3u8_info=m3u8_info
+        output_file=segments_output
     )
     
     print(f"\nParsing results:")
