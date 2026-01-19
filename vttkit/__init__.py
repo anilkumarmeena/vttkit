@@ -30,9 +30,15 @@ Example usage:
     ... )
 """
 
+import logging
+
 __version__ = "0.1.0"
 __author__ = "VTTKit Contributors"
 __license__ = "MIT"
+
+# Add NullHandler to prevent "No handler found" warnings
+# Users should configure logging in their application if they want to see logs
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 # Core parsing functions
 from .core import (

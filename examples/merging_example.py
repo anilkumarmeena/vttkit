@@ -4,7 +4,15 @@ VTT merging example.
 Demonstrates merging multiple VTT files with deduplication.
 """
 
+import logging
+
 from vttkit import VTTMerger
+
+# Configure logging to see vttkit internal logs
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 def main():
     # Initialize merger

@@ -13,7 +13,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def extract_m3u8_info(m3u8_url: str, timeout: int = 30) -> Dict[str, any]:
+def extract_m3u8_info(m3u8_url: str, timeout: int = 30, verify_ssl: bool = False) -> Dict[str, any]:
     """
     Extract timing information from M3U8 playlist.
     
@@ -25,6 +25,7 @@ def extract_m3u8_info(m3u8_url: str, timeout: int = 30) -> Dict[str, any]:
     Args:
         m3u8_url: URL to M3U8 playlist
         timeout: Request timeout in seconds (default: 30)
+        verify_ssl: Whether to verify SSL certificates (default: False for compatibility)
         
     Returns:
         Dictionary with program_time, media_sequence, and segment_duration
@@ -35,7 +36,7 @@ def extract_m3u8_info(m3u8_url: str, timeout: int = 30) -> Dict[str, any]:
         1234 5.0
     """
     try:
-        response = requests.get(m3u8_url, timeout=timeout)
+        response = requests.get(m3u8_url, timeout=timeout, verify=verify_ssl)
         response.raise_for_status()
         
         program_time = None

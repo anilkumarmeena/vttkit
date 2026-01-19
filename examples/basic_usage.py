@@ -4,7 +4,15 @@ Basic VTTKit usage example.
 Demonstrates downloading and parsing a VTT file from a direct URL.
 """
 
+import logging
+
 from vttkit import VTTDownloader, VTTParser
+
+# Configure logging to see vttkit internal logs
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 def main():
     # Initialize downloader and parser

@@ -28,6 +28,19 @@ pip install -e .
 
 ## Quick Start
 
+### Enable Logging (Optional)
+
+VTTKit uses Python's standard logging module. To see internal logs, configure logging in your script:
+
+```python
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+```
+
 ### Download and Parse a VTT File
 
 ```python

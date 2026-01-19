@@ -5,8 +5,16 @@ Demonstrates downloading and parsing VTT from a YouTube live stream
 with timestamp correction and incremental merging.
 """
 
+import logging
+
 from vttkit import VTTDownloader, VTTParser
 from vttkit.youtube import extract_m3u8_info, extract_youtube_live_info
+
+# Configure logging to see vttkit internal logs
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 def main():
     # YouTube live stream URL
@@ -55,11 +63,13 @@ def main():
     )
     print(f"Downloaded and merged to: {vtt_path}")
     
+    # Set output path for segments in the same directory as VTT
+    segments_output = vtt_path.replace('.vtt', '_segments.json')
     # Parse with timestamp correction
     print("\nParsing with timestamp correction...")
     result = parser.parse_to_segments(
         vtt_file=vtt_path,
-        output_file="live_segments.json",
+        output_file=segments_output,
         is_youtube=True,
         m3u8_info=m3u8_info
     )

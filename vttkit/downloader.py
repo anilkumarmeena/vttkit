@@ -33,7 +33,7 @@ def is_hls_playlist(content: str) -> bool:
     return content.strip().startswith('#EXTM3U')
 
 
-def download_vtt_segments_from_hls(playlist_url: str, timeout: int = 30) -> str:
+def download_vtt_segments_from_hls(playlist_url: str, timeout: int = 30, verify_ssl: bool = False) -> str:
     """
     Download and merge VTT segments from HLS playlist.
     
@@ -43,6 +43,7 @@ def download_vtt_segments_from_hls(playlist_url: str, timeout: int = 30) -> str:
     Args:
         playlist_url: URL to HLS playlist (M3U8)
         timeout: Request timeout in seconds (default: 30)
+        verify_ssl: Whether to verify SSL certificates (default: False for compatibility)
         
     Returns:
         Merged VTT content as string
@@ -54,7 +55,7 @@ def download_vtt_segments_from_hls(playlist_url: str, timeout: int = 30) -> str:
         logger.info("Detected HLS playlist format, downloading segments...")
         
         # Download the playlist
-        response = requests.get(playlist_url, timeout=timeout)
+        response = requests.get(playlist_url, timeout=timeout, verify=verify_ssl)
         response.raise_for_status()
         playlist_content = response.text
         
@@ -81,7 +82,7 @@ def download_vtt_segments_from_hls(playlist_url: str, timeout: int = 30) -> str:
         for i, segment_url in enumerate(segment_urls):
             try:
                 logger.debug(f"Downloading segment {i+1}/{len(segment_urls)}")
-                seg_response = requests.get(segment_url, timeout=timeout)
+                seg_response = requests.get(segment_url, timeout=timeout, verify=verify_ssl)
                 seg_response.raise_for_status()
                 segment_content = seg_response.text
                 
@@ -154,7 +155,8 @@ class VTTDownloader:
         is_youtube: bool = False,
         append_mode: bool = False,
         stream_url: Optional[str] = None,
-        timeout: int = 30
+        timeout: int = 30,
+        verify_ssl: bool = False
     ) -> str:
         """
         Download VTT file from URL and save to local filesystem.
@@ -171,6 +173,7 @@ class VTTDownloader:
             append_mode: If True, append new content to existing file (for live streams)
             stream_url: Original stream URL (for YouTube streams, used for yt-dlp)
             timeout: Request timeout in seconds (default: 30)
+            verify_ssl: Whether to verify SSL certificates (default: False for compatibility)
             
         Returns:
             Local file path where VTT was saved
@@ -227,7 +230,7 @@ class VTTDownloader:
                 logger.info(f"Downloading VTT from: {url[:100]}...")
                 
                 # Make HTTP request with timeout
-                response = requests.get(url, timeout=timeout)
+                response = requests.get(url, timeout=timeout, verify=verify_ssl)
                 response.raise_for_status()
                 
                 new_content = response.text
@@ -235,8 +238,13 @@ class VTTDownloader:
                 # Check if this is an HLS playlist
                 if is_hls_playlist(new_content):
                     logger.info("Detected HLS playlist format, attempting segment download")
-                    new_content = download_vtt_segments_from_hls(url, timeout=timeout)
+                    new_content = download_vtt_segments_from_hls(url, timeout=timeout, verify_ssl=verify_ssl)
             
+            # Save the current downloaded VTT (non-modified)
+            current_path = os.path.join(output_dir, f"{stream_id}_current.vtt")
+            with open(current_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+            logger.info(f"Current VTT saved to: {current_path}")
             # Handle append mode for live streams
             if append_mode and os.path.exists(local_path):
                 logger.info("Append mode: merging with existing VTT file")
