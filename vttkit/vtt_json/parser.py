@@ -90,36 +90,6 @@ class VTTParser:
         header = parsed_data['header']
         cues = parsed_data['cues']
         
-        # Calculate and apply timestamp correction for YouTube streams
-        corrector = None
-        offset_seconds = 0.0
-        correction_method = "none"
-        
-        if is_youtube and m3u8_info:
-            logger.info("YouTube stream detected - calculating timestamp correction")
-            corrector = VTTTimestampCorrector(m3u8_info)
-            offset_seconds = corrector.offset_seconds
-            correction_method = corrector.correction_method
-            
-            if offset_seconds > 0:
-                logger.info(f"Applying timestamp correction: {offset_seconds:.3f}s using {correction_method}")
-                cues = corrector.apply_to_cues(cues)
-            else:
-                logger.info("No timestamp correction needed (offset is 0)")
-        
-        # Add timestamp correction metadata to header
-        if corrector:
-            header['timestamp_correction'] = corrector.get_correction_metadata()
-        else:
-            header['timestamp_correction'] = {
-                'applied': False,
-                'offset_seconds': 0.0,
-                'media_sequence': None,
-                'segment_duration': None,
-                'program_time': None,
-                'correction_method': 'none'
-            }
-        
         # Format as segments.json structure
         segments_data = {
             "header": header,
@@ -131,15 +101,11 @@ class VTTParser:
             json.dump(segments_data, f, indent=2, ensure_ascii=False)
 
         logger.info(f"VTT parsing complete: {len(cues)} cues extracted")
-        if offset_seconds > 0:
-            logger.info(f"Timestamps corrected by {offset_seconds:.3f}s ({offset_seconds/3600:.2f} hours)")
         
         # Return result
         return {
             "segments_path": output_file,
             "cues_count": len(cues),
-            "offset_applied": offset_seconds,
-            "correction_method": correction_method,
         }
     
     def parse_content_to_dict(
@@ -171,13 +137,6 @@ class VTTParser:
         
         header = parsed_data['header']
         cues = parsed_data['cues']
-        
-        # Apply timestamp correction if needed
-        if is_youtube and m3u8_info:
-            corrector = VTTTimestampCorrector(m3u8_info)
-            if corrector.offset_seconds > 0:
-                cues = corrector.apply_to_cues(cues)
-            header['timestamp_correction'] = corrector.get_correction_metadata()
         
         return {
             "header": header,

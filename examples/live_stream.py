@@ -106,8 +106,6 @@ def main():
     
     print(f"\nParsing results:")
     print(f"  ✓ Parsed {result['cues_count']} cues")
-    print(f"  ✓ Timestamp offset applied: {result['offset_applied']}s")
-    print(f"  ✓ Correction method: {result['correction_method']}")
     print(f"  ✓ Output saved to: {result['segments_path']}")
     
     print("\n" + "="*70)

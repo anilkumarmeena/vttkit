@@ -194,26 +194,36 @@ def format_cue_with_word_timestamps(start_time: str, end_time: str, words: List[
     Example:
         >>> words = [
         ...     {"word": "preparing", "time": "00:00:00.000"},
-        ...     {"word": "to", "time": "00:00:01.243"}
+        ...     {"word": "to", "time": "00:00:01.243"},
+        ...     {"word": "activate", "time": "00:00:01.757"}
         ... ]
         >>> format_cue_with_word_timestamps("00:00:00.000", "00:00:03.000", words)
-        '<00:00:00.000><c>preparing</c> <00:00:01.243><c>to</c>\\npreparing to'
+        'preparing<00:00:01.243><c> to</c><00:00:01.757><c> activate</c>\\npreparing to activate'
     """
     if not words:
         return ""
     
     # Build word-level timestamp line and collect plain words
+    # Format: first_word<timestamp2><c> word2</c><timestamp3><c> word3</c>
+    # Space appears AFTER <c> tag (before the word text inside the tag)
     formatted_parts = []
     plain_words = []
     
-    for word in words:
+    for i, word in enumerate(words):
         timestamp = word["time"]
         word_text = word["word"]
-        formatted_parts.append(f"<{timestamp}><c>{word_text}</c>")
         plain_words.append(word_text)
+        
+        if i == 0:
+            # First word: just the plain text (no tags)
+            formatted_parts.append(word_text)
+        else:
+            # Subsequent words: <timestamp><c> word</c> (space INSIDE <c> tag)
+            formatted_parts.append(f"<{timestamp}><c> {word_text}</c>")
     
     # Return both: word timestamps line + plain text line
-    word_timestamp_line = " ".join(formatted_parts)
+    # Join without spaces since spaces are inside <c> tags
+    word_timestamp_line = "".join(formatted_parts)
     plain_text_line = " ".join(plain_words)
     
     return f"{word_timestamp_line}\n{plain_text_line}"
@@ -236,7 +246,9 @@ def enrich_vtt_content_with_word_timestamps(vtt_content: str) -> str:
     Example:
         >>> content = "WEBVTT\\n\\n00:00:01.000 --> 00:00:03.000\\nHello world"
         >>> enriched = enrich_vtt_content_with_word_timestamps(content)
-        >>> "<00:00:01.000><c>Hello</c>" in enriched
+        >>> "Hello<" in enriched  # First word is plain text
+        True
+        >>> "<c> world</c>" in enriched  # Subsequent words have <c> tags with leading space
         True
     """
     # Split into blocks (header + cues)
