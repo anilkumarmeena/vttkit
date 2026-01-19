@@ -49,7 +49,7 @@ Repository = "https://github.com/vttkit/vttkit"
 Issues = "https://github.com/vttkit/vttkit/issues"
 
 [tool.setuptools]
-packages = ["vttkit", "vttkit.youtube"]
+packages = ["vttkit", "vttkit.youtube", "vttkit.vtt_json"]
 
 [tool.setuptools.package-data]
 vttkit = ["py.typed"]
