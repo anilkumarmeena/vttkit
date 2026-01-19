@@ -6,7 +6,7 @@ timestamp conversion functions and word-level timestamp estimation.
 """
 
 import re
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 
 def timestamp_to_seconds(timestamp: str) -> float:
@@ -176,20 +176,112 @@ def estimate_word_timestamps(cue_start: str, cue_end: str, text: str) -> List[Di
     return result
 
 
-def format_cue_with_word_timestamps(start_time: str, end_time: str, words: List[Dict[str, str]]) -> str:
+def _estimate_word_duration(word: str) -> float:
     """
-    Format a cue with word-level timestamps into VTT format with dual output:
-    word-level timestamps for karaoke/highlighting + plain text for fallback.
+    Estimate speaking duration based on character count.
+    Uses ~5.5 chars/second (165 WPM average speaking rate).
     
     Args:
-        start_time: Cue start timestamp (not used in formatting, kept for consistency)
-        end_time: Cue end timestamp (not used in formatting, kept for consistency)
+        word: The word text
+        
+    Returns:
+        Duration in seconds, clamped between 0.2s - 1.5s
+    """
+    CHARS_PER_SECOND = 5.5
+    MIN_DURATION = 0.2
+    MAX_DURATION = 1.5
+    
+    duration = len(word) / CHARS_PER_SECOND
+    return max(MIN_DURATION, min(MAX_DURATION, duration))
+
+
+def _normalize_word_timings(words: List[Dict[str, str]], start_time: str) -> List[Dict[str, str]]:
+    """
+    Normalize word timestamps to ensure proper spacing.
+    
+    Fixes:
+    - Identical timestamps → adds word-length-based spacing
+    - Backwards timestamps → enforces chronological order
+    
+    Args:
+        words: List of word dicts with 'word' and 'time' keys
+        start_time: Cue start time to use as minimum
+        
+    Returns:
+        Normalized list of words with corrected timestamps
+    """
+    if not words:
+        return words
+    
+    normalized = []
+    last_time_seconds = timestamp_to_seconds(start_time)
+    
+    for word in words:
+        word_time_seconds = timestamp_to_seconds(word['time'])
+        
+        # If word is at/before last time, push it forward
+        if word_time_seconds <= last_time_seconds:
+            if normalized:
+                # Use previous word's estimated duration as spacing
+                prev_duration = _estimate_word_duration(normalized[-1]['word'])
+                word_time_seconds = last_time_seconds + prev_duration
+            else:
+                word_time_seconds = last_time_seconds
+        
+        normalized.append({
+            'word': word['word'],
+            'time': seconds_to_timestamp(word_time_seconds)
+        })
+        last_time_seconds = word_time_seconds
+    
+    return normalized
+
+
+def _calculate_cue_end_time(words: List[Dict[str, str]], provided_end_time: str) -> str:
+    """
+    Calculate proper cue end time based on last word + its duration.
+    Ensures last word has time to display before cue ends.
+    
+    Args:
+        words: Normalized list of words
+        provided_end_time: Original end time from JSON
+        
+    Returns:
+        Calculated end time (last word time + 80% of word duration)
+    """
+    if not words:
+        return provided_end_time
+    
+    last_word = words[-1]
+    last_word_time = timestamp_to_seconds(last_word['time'])
+    last_word_duration = _estimate_word_duration(last_word['word'])
+    
+    # Add 80% of word duration as buffer
+    calculated_end = last_word_time + (last_word_duration * 0.8)
+    
+    # Use whichever is larger
+    provided_end = timestamp_to_seconds(provided_end_time)
+    final_end = max(calculated_end, provided_end)
+    
+    return seconds_to_timestamp(final_end)
+
+
+def format_cue_with_word_timestamps(start_time: str, end_time: str, words: List[Dict[str, str]]) -> Tuple[str, str]:
+    """
+    Format a cue with word-level timestamps into VTT format.
+    Normalizes word timings and calculates proper end_time based on word lengths.
+    
+    Args:
+        start_time: Cue start timestamp
+        end_time: Cue end timestamp (may be adjusted based on word durations)
         words: List of word dictionaries with 'word' and 'time' keys
         
     Returns:
-        Formatted VTT cue content with two lines:
-        - Line 1: Word-level timestamps with <timestamp><c>word</c> tags
-        - Line 2: Plain text sentence for fallback/readability
+        Tuple of (formatted_vtt_content, corrected_end_time)
+        - formatted_vtt_content: VTT cue content with two lines:
+          Line 1: Word-level timestamps with <timestamp><c>word</c> tags
+          Line 2: Plain text sentence for fallback/readability
+        - corrected_end_time: Adjusted end time ensuring last word has display time
         
     Example:
         >>> words = [
@@ -197,19 +289,27 @@ def format_cue_with_word_timestamps(start_time: str, end_time: str, words: List[
         ...     {"word": "to", "time": "00:00:01.243"},
         ...     {"word": "activate", "time": "00:00:01.757"}
         ... ]
-        >>> format_cue_with_word_timestamps("00:00:00.000", "00:00:03.000", words)
-        'preparing<00:00:01.243><c> to</c><00:00:01.757><c> activate</c>\\npreparing to activate'
+        >>> content, end = format_cue_with_word_timestamps("00:00:00.000", "00:00:03.000", words)
+        >>> # content: 'preparing<00:00:01.243><c> to</c><00:00:01.757><c> activate</c>\\npreparing to activate'
+        >>> # end: adjusted timestamp based on word durations
     """
     if not words:
-        return ""
+        return ("", end_time)
     
+    # Step 1: Normalize word timings to fix identical/overlapping timestamps
+    normalized_words = _normalize_word_timings(words, start_time)
+    
+    # Step 2: Calculate proper end time based on last word + its duration
+    corrected_end_time = _calculate_cue_end_time(normalized_words, end_time)
+    
+    # Step 3: Format VTT content (existing logic with normalized words)
     # Build word-level timestamp line and collect plain words
     # Format: first_word<timestamp2><c> word2</c><timestamp3><c> word3</c>
     # Space appears AFTER <c> tag (before the word text inside the tag)
     formatted_parts = []
     plain_words = []
     
-    for i, word in enumerate(words):
+    for i, word in enumerate(normalized_words):
         timestamp = word["time"]
         word_text = word["word"]
         plain_words.append(word_text)
@@ -221,12 +321,12 @@ def format_cue_with_word_timestamps(start_time: str, end_time: str, words: List[
             # Subsequent words: <timestamp><c> word</c> (space INSIDE <c> tag)
             formatted_parts.append(f"<{timestamp}><c> {word_text}</c>")
     
-    # Return both: word timestamps line + plain text line
     # Join without spaces since spaces are inside <c> tags
     word_timestamp_line = "".join(formatted_parts)
     plain_text_line = " ".join(plain_words)
+    content = f"{word_timestamp_line}\n{plain_text_line}"
     
-    return f"{word_timestamp_line}\n{plain_text_line}"
+    return (content, corrected_end_time)
 
 
 def enrich_vtt_content_with_word_timestamps(vtt_content: str) -> str:
@@ -313,11 +413,15 @@ def enrich_vtt_content_with_word_timestamps(vtt_content: str) -> str:
         # Estimate word timestamps
         words = estimate_word_timestamps(start_time, end_time, clean_text)
         
-        # Format with word timestamps
-        enriched_text = format_cue_with_word_timestamps(start_time, end_time, words)
+        # Format with word timestamps and get corrected end time
+        enriched_text, corrected_end_time = format_cue_with_word_timestamps(start_time, end_time, words)
         
-        # Rebuild the block with enriched content
-        new_block_lines = lines[:timestamp_line_idx + 1]  # Keep identifier and timestamp
+        # Rebuild the block with enriched content and corrected timestamp
+        new_block_lines = lines[:timestamp_line_idx]  # Keep identifier (if any)
+        # Update timestamp line with corrected end time
+        timestamp_line = lines[timestamp_line_idx]
+        corrected_timestamp_line = timestamp_line.replace(end_time, corrected_end_time)
+        new_block_lines.append(corrected_timestamp_line)
         new_block_lines.append(enriched_text)
         enriched_blocks.append('\n'.join(new_block_lines))
     
