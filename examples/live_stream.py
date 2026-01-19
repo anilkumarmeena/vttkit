@@ -1,10 +1,14 @@
 """
 Live stream processing example.
 
-Demonstrates downloading and processing VTT from a YouTube live stream.
-The downloader saves raw VTT content to _current.vtt file, and with append_mode
-enabled, also transforms (applies timestamp corrections) and merges into the main
-VTT file with deduplication.
+Demonstrates downloading and processing VTT from a YouTube live stream with
+complete pipeline including word-level timestamp enrichment.
+
+Pipeline:
+1. Download VTT → _current.vtt
+2. Apply timestamp correction (YouTube live streams)
+3. Enrich with word-level timestamps (optional)
+4. Merge into main VTT file with deduplication
 """
 
 import logging
@@ -24,6 +28,10 @@ def main():
     
     # VTT URL (optional - will be auto-extracted from YouTube if not provided)
     vtt_url = None  # Set to None to auto-extract, or provide the M3U8 URL directly
+    
+    # Enable word-level timestamp enrichment (NEW feature)
+    # Set to True to automatically add estimated word timestamps to VTT files
+    enrich_word_timestamps = True
     
     # Initialize clients
     downloader = VTTDownloader()
@@ -54,8 +62,10 @@ def main():
     print(f"Media sequence: {m3u8_info.get('media_sequence')}")
     print(f"Segment duration: {m3u8_info.get('segment_duration')}s")
     
-    # Download live stream VTT (saved to _current.vtt, then transformed and merged to main VTT)
+    # Download live stream VTT with complete processing pipeline
     print("\nDownloading live stream VTT...")
+    print(f"Word timestamp enrichment: {'ENABLED' if enrich_word_timestamps else 'DISABLED'}")
+    
     vtt_path = downloader.download(
         url=vtt_url,
         output_dir="local/live_vtt",
@@ -63,9 +73,26 @@ def main():
         is_youtube=True,
         append_mode=True,  # Transform and merge into main VTT file
         stream_url=live_url,
-        m3u8_info=m3u8_info  # Pass M3U8 info for timestamp correction
+        m3u8_info=m3u8_info,  # Pass M3U8 info for timestamp correction
+        enrich_word_timestamps=enrich_word_timestamps  # NEW: Add word-level timestamps
     )
     print(f"Downloaded to: {vtt_path}")
+    
+    # Show sample of word-level timestamps if enrichment was enabled
+    if enrich_word_timestamps:
+        print("\n" + "="*70)
+        print("Sample of VTT with word-level timestamps:")
+        print("="*70)
+        with open(vtt_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            # Show first few cues
+            sample_lines = 0
+            for line in lines:
+                print(line.rstrip())
+                sample_lines += 1
+                if sample_lines >= 15:  # Show first 15 lines
+                    break
+        print("="*70)
     
     # Parse the merged VTT file (timestamps already corrected during download)
     print("\nParsing merged VTT file...")
@@ -77,10 +104,25 @@ def main():
         m3u8_info=m3u8_info
     )
     
-    print(f"Parsed {result['cues_count']} cues")
-    print(f"Timestamp offset applied: {result['offset_applied']}s")
-    print(f"Correction method: {result['correction_method']}")
-    print(f"Output saved to: {result['segments_path']}")
+    print(f"\nParsing results:")
+    print(f"  ✓ Parsed {result['cues_count']} cues")
+    print(f"  ✓ Timestamp offset applied: {result['offset_applied']}s")
+    print(f"  ✓ Correction method: {result['correction_method']}")
+    print(f"  ✓ Output saved to: {result['segments_path']}")
+    
+    print("\n" + "="*70)
+    print("Complete processing pipeline executed successfully!")
+    print("="*70)
+    print("\nPipeline steps:")
+    print("  1. ✓ Downloaded VTT from YouTube live stream")
+    print("  2. ✓ Applied timestamp correction using M3U8 metadata")
+    if enrich_word_timestamps:
+        print("  3. ✓ Enriched with word-level timestamps (syllable-based)")
+    else:
+        print("  3. ⊗ Word enrichment skipped (set enrich_word_timestamps=True to enable)")
+    print("  4. ✓ Merged with existing VTT (deduplication)")
+    print("  5. ✓ Parsed to segments.json format")
+    print("="*70)
 
 if __name__ == "__main__":
     main()

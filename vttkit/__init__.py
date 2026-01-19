@@ -44,6 +44,10 @@ logging.getLogger(__name__).addHandler(logging.NullHandler())
 from .utils import (
     timestamp_to_seconds,
     seconds_to_timestamp,
+    estimate_word_timestamps,
+    format_cue_with_word_timestamps,
+    enrich_vtt_with_word_timestamps,
+    enrich_vtt_content_with_word_timestamps,
 )
 
 # VTT utility functions (from vtt_json)
@@ -100,6 +104,12 @@ __all__ = [
     "clean_vtt_content",
     "split_long_cues",
     "build_cues_from_words",
+    
+    # Word timestamp estimation
+    "estimate_word_timestamps",
+    "format_cue_with_word_timestamps",
+    "enrich_vtt_with_word_timestamps",
+    "enrich_vtt_content_with_word_timestamps",
     
     # Main classes
     "VTTDownloader",

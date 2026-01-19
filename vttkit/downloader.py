@@ -157,7 +157,8 @@ class VTTDownloader:
         stream_url: Optional[str] = None,
         timeout: int = 30,
         verify_ssl: bool = False,
-        m3u8_info: Optional[dict] = None
+        m3u8_info: Optional[dict] = None,
+        enrich_word_timestamps: bool = False
     ) -> str:
         """
         Download VTT file from URL and save to local filesystem.
@@ -179,6 +180,7 @@ class VTTDownloader:
             timeout: Request timeout in seconds (default: 30)
             verify_ssl: Whether to verify SSL certificates (default: False for compatibility)
             m3u8_info: M3U8 metadata for timestamp correction (used when append_mode=True)
+            enrich_word_timestamps: If True, adds estimated word-level timestamps to cues (default: False)
             
         Returns:
             Local file path where VTT was saved:
@@ -240,27 +242,47 @@ class VTTDownloader:
                     logger.info("Detected HLS playlist format, attempting segment download")
                     new_content = download_vtt_segments_from_hls(url, timeout=timeout, verify_ssl=verify_ssl)
             
-            # Save the downloaded VTT to _current.vtt file only
+            # Step 1: Save the original downloaded VTT to _current.vtt (for reference/debugging)
             current_path = os.path.join(output_dir, f"{stream_id}_current.vtt")
             with open(current_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
-            logger.info(f"VTT saved successfully to: {current_path}")
+            logger.info(f"Original VTT saved to: {current_path}")
             
             # Handle append mode: transform and merge into main VTT file
             if append_mode:
                 main_path = os.path.join(output_dir, f"{stream_id}.vtt")
                 
-                # Calculate timestamp offset if m3u8_info provided
-                offset_seconds = 0.0
+                # Step 2: Apply timestamp correction (if YouTube with m3u8_info)
+                corrected_content = new_content
                 if is_youtube and m3u8_info:
-                    from .corrector import calculate_timestamp_offset
+                    from .corrector import calculate_timestamp_offset, apply_offset_to_vtt_content
                     offset_seconds, correction_method = calculate_timestamp_offset(m3u8_info)
                     logger.info(f"Calculated timestamp offset: {offset_seconds:.3f}s using {correction_method}")
+                    corrected_content = apply_offset_to_vtt_content(new_content, offset_seconds)
+                    logger.info("Applied timestamp correction to content")
                 
-                # Merge with existing main VTT file
+                # Step 3: Add word-level timestamps (if requested)
+                timestamped_content = corrected_content
+                if enrich_word_timestamps:
+                    from .utils import enrich_vtt_content_with_word_timestamps
+                    logger.info("Enriching VTT with estimated word-level timestamps")
+                    try:
+                        timestamped_content = enrich_vtt_content_with_word_timestamps(corrected_content)
+                        logger.info("Successfully enriched content with word-level timestamps")
+                    except Exception as e:
+                        logger.warning(f"Failed to enrich word timestamps: {str(e)}, continuing with corrected content")
+                        timestamped_content = corrected_content
+                
+                # Step 4: Save intermediate timestamped file (corrected + word timestamps)
+                timestamped_path = os.path.join(output_dir, f"{stream_id}_current_timestamped.vtt")
+                with open(timestamped_path, 'w', encoding='utf-8') as f:
+                    f.write(timestamped_content)
+                logger.info(f"Timestamped VTT saved to: {timestamped_path}")
+                
+                # Step 5: Merge into main VTT file (no offset needed - already applied)
                 from .merger import merge_vtt_content
-                logger.info("Append mode: transforming and merging into main VTT file")
-                merged_content = merge_vtt_content(main_path, new_content, new_vtt_offset_seconds=offset_seconds)
+                logger.info("Merging timestamped content into main VTT file")
+                merged_content = merge_vtt_content(main_path, timestamped_content, new_vtt_offset_seconds=0.0)
                 
                 # Save merged content to main VTT file
                 with open(main_path, 'w', encoding='utf-8') as f:

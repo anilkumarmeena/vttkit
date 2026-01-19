@@ -55,9 +55,11 @@ def parse_vtt_cues(vtt_content: str) -> List[Dict[str, str]]:
                 i += 1
             
             if text_lines:
+                # Preserve multi-line format (e.g., word timestamps + plain text)
+                # Use newline to join lines, maintaining dual format
                 cues.append({
                     'timestamp': timestamp_line,
-                    'text': ' '.join(text_lines),
+                    'text': '\n'.join(text_lines),  # Changed from ' '.join to '\n'.join
                     'raw': '\n'.join(raw_lines)
                 })
         else:
@@ -108,12 +110,15 @@ def merge_vtt_content(existing_vtt_path: str, new_vtt_content: str, new_vtt_offs
     Merge new VTT content with existing VTT file, deduplicating cues.
     
     Maintains proper VTT format with single WEBVTT header and sequential cue numbering.
-    Optionally applies timestamp offset to new content before merging (for live streams).
+    
+    NOTE: In the optimized pipeline, timestamp corrections should be applied to new_vtt_content
+    BEFORE calling this function. The new_vtt_offset_seconds parameter is kept for backward
+    compatibility but should typically be 0.0 in the new flow.
     
     Args:
         existing_vtt_path: Path to existing VTT file
-        new_vtt_content: New VTT content to append
-        new_vtt_offset_seconds: Optional timestamp offset to apply to new content before merging (default: 0.0)
+        new_vtt_content: New VTT content to append (should already have corrected timestamps)
+        new_vtt_offset_seconds: Optional timestamp offset to apply (default: 0.0, use only for legacy support)
         
     Returns:
         Merged VTT content as string
@@ -125,7 +130,7 @@ def merge_vtt_content(existing_vtt_path: str, new_vtt_content: str, new_vtt_offs
         >>> "WEBVTT" in merged
         True
     """
-    # Apply timestamp offset to new content if specified
+    # Apply timestamp offset to new content if specified (legacy support)
     if new_vtt_offset_seconds > 0:
         from .corrector import apply_offset_to_vtt_content
         logger.info(f"Applying timestamp offset to new VTT content before merge: {new_vtt_offset_seconds:.3f}s")
@@ -153,13 +158,8 @@ def merge_vtt_content(existing_vtt_path: str, new_vtt_content: str, new_vtt_offs
     # Combine all cues
     all_cues = existing_cues + unique_new_cues
     
-    # Build merged VTT content with proper formatting
-    merged_content = "WEBVTT\n\n"
-    
-    for idx, cue in enumerate(all_cues, start=1):
-        merged_content += f"{idx}\n"
-        merged_content += f"{cue['timestamp']}\n"
-        merged_content += f"{cue['text']}\n\n"
+    # Build merged VTT content using format function (preserves multi-line content)
+    merged_content = format_vtt_from_cues(all_cues)
     
     logger.info(f"Merged VTT file now contains {len(all_cues)} total cues")
     return merged_content
@@ -168,6 +168,8 @@ def merge_vtt_content(existing_vtt_path: str, new_vtt_content: str, new_vtt_offs
 def format_vtt_from_cues(cues: List[Dict[str, str]]) -> str:
     """
     Format a list of cues into valid VTT content.
+    
+    Preserves multi-line cue content (e.g., word timestamps + plain text).
     
     Args:
         cues: List of cue dictionaries
@@ -186,6 +188,7 @@ def format_vtt_from_cues(cues: List[Dict[str, str]]) -> str:
     for idx, cue in enumerate(cues, start=1):
         content += f"{idx}\n"
         content += f"{cue['timestamp']}\n"
+        # Preserve multi-line text (word timestamps + plain text)
         content += f"{cue['text']}\n\n"
     
     return content
