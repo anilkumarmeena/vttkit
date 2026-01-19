@@ -140,6 +140,66 @@ def apply_offset_to_cues(cues: List[Dict[str, Any]], offset_seconds: float) -> L
     return adjusted_cues
 
 
+def apply_offset_to_vtt_content(vtt_content: str, offset_seconds: float) -> str:
+    """
+    Apply timestamp offset directly to VTT content string.
+    
+    This function is more efficient than parsing to cues and back for simple
+    timestamp correction operations. It processes VTT content line by line,
+    finding timestamp lines and applying the offset.
+    
+    Args:
+        vtt_content: Raw VTT content as string
+        offset_seconds: Seconds to add to all timestamps
+        
+    Returns:
+        VTT content with corrected timestamps
+        
+    Example:
+        >>> content = "WEBVTT\\n\\n00:00:05.000 --> 00:00:07.000\\nHello"
+        >>> corrected = apply_offset_to_vtt_content(content, 120)
+        >>> "00:02:05.000 --> 00:02:07.000" in corrected
+        True
+    """
+    if offset_seconds == 0:
+        return vtt_content
+    
+    logger.info(f"Applying timestamp offset to VTT content: {offset_seconds:.3f}s ({offset_seconds/3600:.2f} hours)")
+    
+    lines = vtt_content.split('\n')
+    corrected_lines = []
+    
+    for line in lines:
+        # Check if line contains VTT timestamp (format: HH:MM:SS.mmm --> HH:MM:SS.mmm)
+        if '-->' in line:
+            # Extract timestamps from the line
+            parts = line.split('-->')
+            if len(parts) == 2:
+                try:
+                    # Parse and adjust start timestamp
+                    start_timestamp = parts[0].strip()
+                    end_timestamp = parts[1].strip()
+                    
+                    # Apply offset to both timestamps
+                    corrected_start = add_seconds_to_timestamp(start_timestamp, offset_seconds)
+                    corrected_end = add_seconds_to_timestamp(end_timestamp, offset_seconds)
+                    
+                    # Reconstruct the timestamp line
+                    corrected_line = f"{corrected_start} --> {corrected_end}"
+                    corrected_lines.append(corrected_line)
+                except Exception as e:
+                    logger.warning(f"Failed to correct timestamp line '{line}': {str(e)}, keeping original")
+                    corrected_lines.append(line)
+            else:
+                # Malformed timestamp line, keep as-is
+                corrected_lines.append(line)
+        else:
+            # Not a timestamp line, keep as-is
+            corrected_lines.append(line)
+    
+    return '\n'.join(corrected_lines)
+
+
 def parse_timestamp_to_seconds(timestamp: str) -> float:
     """
     Parse a timestamp string into seconds.

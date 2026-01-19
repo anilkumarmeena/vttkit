@@ -103,15 +103,17 @@ def deduplicate_cues(existing_cues: List[Dict[str, str]], new_cues: List[Dict[st
     return unique_new_cues
 
 
-def merge_vtt_content(existing_vtt_path: str, new_vtt_content: str) -> str:
+def merge_vtt_content(existing_vtt_path: str, new_vtt_content: str, new_vtt_offset_seconds: float = 0.0) -> str:
     """
     Merge new VTT content with existing VTT file, deduplicating cues.
     
     Maintains proper VTT format with single WEBVTT header and sequential cue numbering.
+    Optionally applies timestamp offset to new content before merging (for live streams).
     
     Args:
         existing_vtt_path: Path to existing VTT file
         new_vtt_content: New VTT content to append
+        new_vtt_offset_seconds: Optional timestamp offset to apply to new content before merging (default: 0.0)
         
     Returns:
         Merged VTT content as string
@@ -123,6 +125,12 @@ def merge_vtt_content(existing_vtt_path: str, new_vtt_content: str) -> str:
         >>> "WEBVTT" in merged
         True
     """
+    # Apply timestamp offset to new content if specified
+    if new_vtt_offset_seconds > 0:
+        from .corrector import apply_offset_to_vtt_content
+        logger.info(f"Applying timestamp offset to new VTT content before merge: {new_vtt_offset_seconds:.3f}s")
+        new_vtt_content = apply_offset_to_vtt_content(new_vtt_content, new_vtt_offset_seconds)
+    
     # Read existing content if file exists
     existing_cues = []
     if os.path.exists(existing_vtt_path):
@@ -134,7 +142,7 @@ def merge_vtt_content(existing_vtt_path: str, new_vtt_content: str) -> str:
         except Exception as e:
             logger.warning(f"Failed to read existing VTT file: {str(e)}, will create new file")
     
-    # Parse new cues
+    # Parse new cues (now with corrected timestamps if offset was applied)
     new_cues = parse_vtt_cues(new_vtt_content)
     logger.info(f"Parsed {len(new_cues)} new cues from download")
     

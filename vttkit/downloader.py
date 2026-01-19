@@ -2,8 +2,8 @@
 VTT downloader for VTTKit.
 
 Handles downloading VTT files from various sources including direct HTTP URLs,
-HLS playlists (M3U8), and YouTube streams. Supports incremental downloads
-for live streams with merging and deduplication.
+HLS playlists (M3U8), and YouTube streams. Downloads are saved to _current.vtt files,
+with optional timestamp correction and merging to main VTT files when using append mode.
 """
 
 import logging
@@ -13,7 +13,6 @@ from pathlib import Path
 
 import requests
 
-from .merger import merge_vtt_content
 from .youtube import YouTubeClient, is_youtube_url
 from .models import DownloadConfig
 
@@ -135,7 +134,8 @@ class VTTDownloader:
     - HLS playlists (M3U8)
     - YouTube videos and live streams
     
-    Supports incremental downloads for live streams with automatic merging.
+    Downloads are saved to {stream_id}_current.vtt files.
+    With append_mode enabled, also transforms and merges into {stream_id}.vtt.
     """
     
     def __init__(self, youtube_cookies_path: Optional[str] = None):
@@ -156,40 +156,45 @@ class VTTDownloader:
         append_mode: bool = False,
         stream_url: Optional[str] = None,
         timeout: int = 30,
-        verify_ssl: bool = False
+        verify_ssl: bool = False,
+        m3u8_info: Optional[dict] = None
     ) -> str:
         """
         Download VTT file from URL and save to local filesystem.
         
         For YouTube streams, uses yt-dlp to properly handle authentication.
         For other streams, downloads directly from URL.
-        Supports incremental appending for live streams to build complete transcript.
+        
+        The downloaded content is always saved to {stream_id}_current.vtt.
+        If append_mode is True, the content is also transformed (timestamp corrected)
+        and merged into {stream_id}.vtt with deduplication.
         
         Args:
             url: URL to download VTT file from (can be direct VTT or M3U8 playlist)
             output_dir: Directory to save the VTT file
             stream_id: Stream ID for naming the local file (default: generated from URL)
             is_youtube: Whether this is a YouTube stream
-            append_mode: If True, append new content to existing file (for live streams)
+            append_mode: If True, applies timestamp corrections and merges into main VTT file
             stream_url: Original stream URL (for YouTube streams, used for yt-dlp)
             timeout: Request timeout in seconds (default: 30)
             verify_ssl: Whether to verify SSL certificates (default: False for compatibility)
+            m3u8_info: M3U8 metadata for timestamp correction (used when append_mode=True)
             
         Returns:
-            Local file path where VTT was saved
+            Local file path where VTT was saved:
+            - {stream_id}_current.vtt if append_mode=False
+            - {stream_id}.vtt if append_mode=True
             
         Raises:
             Exception: If download or save fails
         """
         try:
-            # Prepare local directory and file path
+            # Prepare local directory
             os.makedirs(output_dir, exist_ok=True)
             
             # Generate stream_id if not provided
             if not stream_id:
                 stream_id = Path(url).stem or "downloaded"
-            
-            local_path = os.path.join(output_dir, f"{stream_id}.vtt")
             
             # Download new content
             new_content = None
@@ -207,16 +212,11 @@ class VTTDownloader:
                         with open(downloaded_vtt, 'r', encoding='utf-8') as f:
                             new_content = f.read()
                         
-                        # Clean up temp download if different from target
-                        if downloaded_vtt != local_path:
-                            try:
-                                # Copy to target location
-                                with open(local_path, 'w', encoding='utf-8') as f:
-                                    f.write(new_content)
-                                # Remove temp file
-                                os.remove(downloaded_vtt)
-                            except:
-                                pass
+                        # Clean up temp download file
+                        try:
+                            os.remove(downloaded_vtt)
+                        except:
+                            pass
                         
                         logger.info(f"Successfully downloaded YouTube subtitles")
                     else:
@@ -240,36 +240,42 @@ class VTTDownloader:
                     logger.info("Detected HLS playlist format, attempting segment download")
                     new_content = download_vtt_segments_from_hls(url, timeout=timeout, verify_ssl=verify_ssl)
             
-            # Save the current downloaded VTT (non-modified)
+            # Save the downloaded VTT to _current.vtt file only
             current_path = os.path.join(output_dir, f"{stream_id}_current.vtt")
             with open(current_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
-            logger.info(f"Current VTT saved to: {current_path}")
-            # Handle append mode for live streams
-            if append_mode and os.path.exists(local_path):
-                logger.info("Append mode: merging with existing VTT file")
-                merged_content = merge_vtt_content(local_path, new_content)
-                final_content = merged_content
-            else:
-                # First download or non-append mode: use new content as-is
-                if os.path.exists(local_path):
-                    logger.info("Overwrite mode: replacing existing VTT file")
-                else:
-                    logger.info("First download: creating new VTT file")
-                final_content = new_content
+            logger.info(f"VTT saved successfully to: {current_path}")
             
-            # Save final content to local file
-            with open(local_path, 'w', encoding='utf-8') as f:
-                f.write(final_content)
+            # Handle append mode: transform and merge into main VTT file
+            if append_mode:
+                main_path = os.path.join(output_dir, f"{stream_id}.vtt")
+                
+                # Calculate timestamp offset if m3u8_info provided
+                offset_seconds = 0.0
+                if is_youtube and m3u8_info:
+                    from .corrector import calculate_timestamp_offset
+                    offset_seconds, correction_method = calculate_timestamp_offset(m3u8_info)
+                    logger.info(f"Calculated timestamp offset: {offset_seconds:.3f}s using {correction_method}")
+                
+                # Merge with existing main VTT file
+                from .merger import merge_vtt_content
+                logger.info("Append mode: transforming and merging into main VTT file")
+                merged_content = merge_vtt_content(main_path, new_content, new_vtt_offset_seconds=offset_seconds)
+                
+                # Save merged content to main VTT file
+                with open(main_path, 'w', encoding='utf-8') as f:
+                    f.write(merged_content)
+                logger.info(f"Merged VTT saved to: {main_path}")
+                
+                return main_path
             
-            logger.info(f"VTT saved successfully to: {local_path}")
-            return local_path
+            return current_path
             
         except requests.RequestException as e:
             logger.error(f"Failed to download VTT from {url[:100] if url else 'N/A'}: {str(e)}")
             raise Exception(f"VTT download failed: {str(e)}")
         except IOError as e:
-            logger.error(f"Failed to save VTT to {local_path}: {str(e)}")
+            logger.error(f"Failed to save VTT: {str(e)}")
             raise Exception(f"VTT save failed: {str(e)}")
     
     def download_from_config(self, config: DownloadConfig) -> str:
@@ -327,7 +333,8 @@ def download_vtt(
     is_youtube: bool = False,
     append_mode: bool = False,
     stream_url: Optional[str] = None,
-    youtube_cookies_path: Optional[str] = None
+    youtube_cookies_path: Optional[str] = None,
+    m3u8_info: Optional[dict] = None
 ) -> str:
     """
     Download VTT file. Convenience function wrapping VTTDownloader.
@@ -341,5 +348,6 @@ def download_vtt(
         stream_id=stream_id,
         is_youtube=is_youtube,
         append_mode=append_mode,
-        stream_url=stream_url
+        stream_url=stream_url,
+        m3u8_info=m3u8_info
     )

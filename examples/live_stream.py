@@ -1,8 +1,10 @@
 """
 Live stream processing example.
 
-Demonstrates downloading and parsing VTT from a YouTube live stream
-with timestamp correction and incremental merging.
+Demonstrates downloading and processing VTT from a YouTube live stream.
+The downloader saves raw VTT content to _current.vtt file, and with append_mode
+enabled, also transforms (applies timestamp corrections) and merges into the main
+VTT file with deduplication.
 """
 
 import logging
@@ -18,7 +20,7 @@ logging.basicConfig(
 
 def main():
     # YouTube live stream URL
-    live_url = "https://www.youtube.com/watch?v=raa4Pz1AP9s"
+    live_url = "https://www.youtube.com/watch?v=7doh6cP2EIQ"
     
     # VTT URL (optional - will be auto-extracted from YouTube if not provided)
     vtt_url = None  # Set to None to auto-extract, or provide the M3U8 URL directly
@@ -51,22 +53,22 @@ def main():
     print(f"Media sequence: {m3u8_info.get('media_sequence')}")
     print(f"Segment duration: {m3u8_info.get('segment_duration')}s")
     
-    # Download live stream VTT (with merging for incremental updates)
+    # Download live stream VTT (saved to _current.vtt, then transformed and merged to main VTT)
     print("\nDownloading live stream VTT...")
     vtt_path = downloader.download(
         url=vtt_url,
         output_dir="local/live_vtt",
         stream_id="live_stream",
         is_youtube=True,
-        append_mode=True,  # Merge with existing file
-        stream_url=live_url
+        append_mode=True,  # Transform and merge into main VTT file
+        stream_url=live_url,
+        m3u8_info=m3u8_info  # Pass M3U8 info for timestamp correction
     )
-    print(f"Downloaded and merged to: {vtt_path}")
+    print(f"Downloaded to: {vtt_path}")
     
-    # Set output path for segments in the same directory as VTT
+    # Parse the merged VTT file (timestamps already corrected during download)
+    print("\nParsing merged VTT file...")
     segments_output = vtt_path.replace('.vtt', '_segments.json')
-    # Parse with timestamp correction
-    print("\nParsing with timestamp correction...")
     result = parser.parse_to_segments(
         vtt_file=vtt_path,
         output_file=segments_output,
