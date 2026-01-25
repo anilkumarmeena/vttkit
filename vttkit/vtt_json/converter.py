@@ -17,10 +17,11 @@ DEFAULT_MAX_CUE_DURATION = 2.0
 TIMESTAMP_ALIGNMENT_TOLERANCE = 0.05  # seconds
 
 # Pre-compiled regex patterns for performance
-_TIMESTAMP_PATTERN = re.compile(r'(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})')
-_CONTENT_PATTERN = re.compile(r'.*<\d{2}:\d{2}:\d{2}\.\d{3}>.*')
-_TAG_PATTERN = re.compile(r'<(\d{2}:\d{2}:\d{2}\.\d{3})><c>([^<]*)</c>')
-_CLEAN_TEXT_PATTERN = re.compile(r'<\d{2}:\d{2}:\d{2}\.\d{3}>|</?c>')
+# Support any number of hour digits for live streams with large offsets
+_TIMESTAMP_PATTERN = re.compile(r'(\d+:\d{2}:\d{2}\.\d{3}) --> (\d+:\d{2}:\d{2}\.\d{3})')
+_CONTENT_PATTERN = re.compile(r'.*<\d+:\d{2}:\d{2}\.\d{3}>.*')
+_TAG_PATTERN = re.compile(r'<(\d+:\d{2}:\d{2}\.\d{3})><c>([^<]*)</c>')
+_CLEAN_TEXT_PATTERN = re.compile(r'<\d+:\d{2}:\d{2}\.\d{3}>|</?c>')
 
 
 def _resolve_inner_timestamp(tag_timestamp: str, base_seconds: float) -> str:

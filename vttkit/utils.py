@@ -32,22 +32,29 @@ def seconds_to_timestamp(seconds: float) -> str:
     """
     Convert seconds to HH:MM:SS.mmm format.
     
+    Supports any number of hours (for live streams with large offsets).
+    Hours are zero-padded to at least 2 digits.
+    
     Args:
         seconds: Time in seconds as float
         
     Returns:
-        Timestamp string in HH:MM:SS.mmm format
+        Timestamp string in HH:MM:SS.mmm format (or HHH+:MM:SS.mmm for >99 hours)
         
     Example:
         >>> seconds_to_timestamp(90.5)
         '00:01:30.500'
+        >>> seconds_to_timestamp(35503367.9)  # 9862 hours
+        '9862:02:47.900'
     """
     hours = int(seconds / 3600)
     minutes = int((seconds % 3600) / 60)
     seconds_remainder = seconds % 60
     milliseconds = int((seconds_remainder - int(seconds_remainder)) * 1000)
     
-    return f"{hours:02d}:{minutes:02d}:{int(seconds_remainder):02d}.{milliseconds:03d}"
+    # Use at least 2 digits for hours, but allow more if needed
+    hours_str = f"{hours:02d}" if hours < 100 else str(hours)
+    return f"{hours_str}:{minutes:02d}:{int(seconds_remainder):02d}.{milliseconds:03d}"
 
 
 def estimate_word_timestamps(cue_start: str, cue_end: str, text: str) -> List[Dict[str, str]]:
@@ -354,10 +361,10 @@ def enrich_vtt_content_with_word_timestamps(vtt_content: str) -> str:
     # Split into blocks (header + cues)
     blocks = vtt_content.strip().split('\n\n')
     
-    # Pattern to match VTT cue timestamps
-    timestamp_pattern = re.compile(r'(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})')
-    # Pattern to detect existing word timestamps
-    word_timestamp_pattern = re.compile(r'<\d{2}:\d{2}:\d{2}\.\d{3}><c>')
+    # Pattern to match VTT cue timestamps (supports any number of hour digits for live streams)
+    timestamp_pattern = re.compile(r'(\d+:\d{2}:\d{2}\.\d{3}) --> (\d+:\d{2}:\d{2}\.\d{3})')
+    # Pattern to detect existing word timestamps (supports any number of hour digits)
+    word_timestamp_pattern = re.compile(r'<\d+:\d{2}:\d{2}\.\d{3}><c>')
     
     enriched_blocks = []
     
@@ -472,8 +479,8 @@ def enrich_vtt_with_word_timestamps(
     enriched_content = enrich_vtt_content_with_word_timestamps(content)
     
     # Calculate statistics for backward compatibility
-    timestamp_pattern = re.compile(r'(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})')
-    word_timestamp_pattern = re.compile(r'<\d{2}:\d{2}:\d{2}\.\d{3}><c>')
+    timestamp_pattern = re.compile(r'(\d+:\d{2}:\d{2}\.\d{3}) --> (\d+:\d{2}:\d{2}\.\d{3})')
+    word_timestamp_pattern = re.compile(r'<\d+:\d{2}:\d{2}\.\d{3}><c>')
     
     original_blocks = content.strip().split('\n\n')
     enriched_blocks = enriched_content.strip().split('\n\n')
