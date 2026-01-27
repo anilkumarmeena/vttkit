@@ -12,6 +12,7 @@ VTTKit is a Python library for downloading, parsing, merging, and processing Web
 ✅ **Correct timestamps** for YouTube live streams using M3U8 metadata  
 ✅ **Output segments.json** format with structured cues and word-level data  
 ✅ **YouTube integration** with yt-dlp (full support)  
+✅ **Transcribe audio** to segments.json using faster-whisper  
 
 ## Installation
 
@@ -111,6 +112,22 @@ result = parser.parse_to_segments(
 )
 
 print(f"Applied {result['offset_applied']}s offset using {result['correction_method']}")
+```
+
+### Audio Transcription (faster-whisper)
+
+```python
+from vttkit import transcribe_to_segments_json
+
+result = transcribe_to_segments_json(
+    audio_path="local/audio.wav",
+    output_file="segments.json",
+    model_name="base",
+    language="en",
+    max_segment_duration=2.0
+)
+
+print(f"Transcribed {result['cues_count']} cues")
 ```
 
 ### Merge Multiple VTT Files

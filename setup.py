@@ -30,6 +30,7 @@ setup(
     install_requires=[
         "requests>=2.28.0",
         "yt-dlp>=2023.0.0",
+        "faster-whisper>=1.0.0",
     ],
     extras_require={
         "dev": [

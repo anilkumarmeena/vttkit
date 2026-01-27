@@ -78,6 +78,7 @@ from .corrector import (
 
 # Data models
 from .models import VTTCue, VTTWord, VTTSegment, DownloadConfig, M3U8Info
+from .models import TranscribeConfig
 
 # YouTube utilities
 from .youtube import (
@@ -88,6 +89,9 @@ from .youtube import (
     extract_m3u8_program_date_time,
     is_m3u8_url,
 )
+
+# Transcription API
+from .transcription import transcribe_to_segments_json, transcribe_from_config
 
 __all__ = [
     # Version info
@@ -136,6 +140,7 @@ __all__ = [
     "VTTSegment",
     "DownloadConfig",
     "M3U8Info",
+    "TranscribeConfig",
     
     # YouTube utilities
     "is_youtube_url",
@@ -143,4 +148,8 @@ __all__ = [
     "extract_m3u8_info",
     "extract_m3u8_program_date_time",
     "is_m3u8_url",
+
+    # Transcription API
+    "transcribe_to_segments_json",
+    "transcribe_from_config",
 ]

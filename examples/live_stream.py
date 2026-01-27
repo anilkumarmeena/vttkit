@@ -24,7 +24,7 @@ logging.basicConfig(
 
 def main():
     # YouTube live stream URL
-    live_url = "https://www.youtube.com/watch?v=raa4Pz1AP9s"
+    live_url = "https://www.youtube.com/watch?v=iEpJwprxDdk"
     
     # VTT URL (optional - will be auto-extracted from YouTube if not provided)
     vtt_url = None  # Set to None to auto-extract, or provide the M3U8 URL directly

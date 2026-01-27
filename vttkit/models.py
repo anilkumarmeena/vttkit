@@ -48,3 +48,18 @@ class M3U8Info:
     program_time: Optional[str] = None
     media_sequence: Optional[int] = None
     segment_duration: float = 5.0
+
+
+@dataclass
+class TranscribeConfig:
+    """Configuration for audio transcription operations."""
+    audio_path: str
+    output_file: str = "segments.json"
+    backend: str = "faster-whisper"
+    model_name: str = "base"
+    language: str = "en"
+    device: str = "auto"
+    compute_type: str = "default"
+    max_segment_duration: float = 2.0
+    word_timestamps: bool = True
+    backend_kwargs: Dict[str, Any] = field(default_factory=dict)
