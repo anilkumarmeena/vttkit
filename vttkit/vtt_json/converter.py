@@ -328,7 +328,8 @@ def _parse_word_timestamps(
     cue_end_seconds: float,
     start_time: str,
     rebuild_cues_from_words: bool,
-    has_emitted_words: bool
+    has_emitted_words: bool,
+    previous_words: Optional[List[Dict[str, str]]] = None
 ) -> List[Dict[str, str]]:
     """
     Extract word-level timestamps from VTT text content.
@@ -340,6 +341,7 @@ def _parse_word_timestamps(
         start_time: Cue start timestamp string
         rebuild_cues_from_words: Whether rebuilding cues from words
         has_emitted_words: Whether words have been emitted previously
+        previous_words: Previously emitted words for overlap trimming when rebuilding
         
     Returns:
         List of word dictionaries with 'word' and 'time' keys
@@ -347,6 +349,29 @@ def _parse_word_timestamps(
     words_with_timestamps = []
     syllables_in_word = []
     matches = list(_TAG_PATTERN.finditer(text_content))
+
+    def _trim_duplicate_prefix(prefix_tokens: List[str], keep_last_token: bool) -> List[str]:
+        if not prefix_tokens or not previous_words:
+            return prefix_tokens
+
+        previous_tokens = [w["word"] for w in previous_words if "word" in w]
+        if not previous_tokens:
+            return prefix_tokens
+
+        max_overlap = min(len(prefix_tokens), len(previous_tokens))
+        if keep_last_token and max_overlap == len(prefix_tokens):
+            max_overlap = len(prefix_tokens) - 1
+
+        overlap = 0
+        for size in range(max_overlap, 0, -1):
+            if previous_tokens[-size:] == prefix_tokens[:size]:
+                overlap = size
+                break
+
+        if overlap:
+            return prefix_tokens[overlap:]
+
+        return prefix_tokens
     
     def finalize_word():
         if not syllables_in_word:
@@ -374,26 +399,30 @@ def _parse_word_timestamps(
         
         text_before_first_tag = text_content[:matches[0].start()]
         text_before_first_tag = text_before_first_tag.replace("\n", " ").rstrip()
-        include_prefix_words = not rebuild_cues_from_words or not has_emitted_words
         
         if text_before_first_tag:
             prefix_tokens = text_before_first_tag.split()
             if prefix_tokens:
+                if rebuild_cues_from_words and has_emitted_words:
+                    prefix_tokens = _trim_duplicate_prefix(
+                        prefix_tokens,
+                        keep_last_token=not first_tag_text.startswith(' ')
+                    )
                 if first_tag_text.startswith(' '):
-                    if include_prefix_words:
-                        for word in prefix_tokens:
-                            words_with_timestamps.append({
-                                "word": word,
-                                "time": start_time
-                            })
+                    for word in prefix_tokens:
+                        words_with_timestamps.append({
+                            "word": word,
+                            "time": start_time
+                        })
                 else:
-                    if include_prefix_words and len(prefix_tokens) > 1:
+                    if len(prefix_tokens) > 1:
                         for word in prefix_tokens[:-1]:
                             words_with_timestamps.append({
                                 "word": word,
                                 "time": start_time
                             })
-                    syllables_in_word = [(start_time, prefix_tokens[-1])]
+                    if prefix_tokens:
+                        syllables_in_word = [(start_time, prefix_tokens[-1])]
         
         # Process all timestamp + text pairs
         for match in matches:
@@ -520,7 +549,8 @@ def parse_vtt_content(
             cue_end_seconds,
             start_time,
             rebuild_cues_from_words,
-            has_emitted_words
+            has_emitted_words,
+            previous_words=all_words if rebuild_cues_from_words else None
         )
 
         if words_with_timestamps:

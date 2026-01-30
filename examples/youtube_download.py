@@ -16,19 +16,20 @@ logging.basicConfig(
 
 def main():
     # YouTube video URL
-    youtube_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    youtube_url = "https://www.youtube.com/watch?v=eSPJsnYY6_4"
     
     # Initialize downloader and parser
     downloader = VTTDownloader()
     parser = VTTParser()
     
     # Download YouTube subtitles
+    # Note: is_youtube and stream_url are now optional - YouTube URLs are auto-detected
     print(f"Downloading subtitles from YouTube...")
     vtt_path = downloader.download(
         url=youtube_url,
         output_dir="local/youtube_vtt",
-        is_youtube=True,
-        stream_url=youtube_url  # Required for yt-dlp
+        # is_youtube=True,  # Optional - auto-detected from URL
+        # stream_url=youtube_url  # Optional - auto-detected from URL
     )
     print(f"Downloaded to: {vtt_path}")
     

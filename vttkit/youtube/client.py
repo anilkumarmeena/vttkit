@@ -98,6 +98,10 @@ class YouTubeClient:
         """
         Download YouTube subtitles using yt-dlp.
         
+        Downloads both manual subtitles and automatic captions, preferring manual
+        subtitles when available (better quality). Falls back to automatic captions
+        if manual subtitles are not available.
+        
         This properly handles authentication and signed URLs that expire.
         Returns the path to the downloaded VTT file.
         
@@ -123,13 +127,15 @@ class YouTubeClient:
             # Ensure output directory exists
             os.makedirs(output_dir, exist_ok=True)
             
-            # Configure yt-dlp to download only subtitles
+            # Configure yt-dlp to download both manual subtitles and automatic captions
+            # yt-dlp will prefer manual subtitles if available, otherwise use automatic captions
+            # Download only first available subtitle to avoid rate limiting (prefer English)
             ydl_opts = self._get_ydl_opts(
                 skip_download=True,
-                writesubtitles=False,
-                writeautomaticsub=True,
+                writesubtitles=True,  # Enable manual subtitles
+                writeautomaticsub=True,  # Enable automatic captions as fallback
                 subtitlesformat='vtt',
-                subtitleslangs=['.*'],
+                subtitleslangs=['en', 'en-orig', 'en-US', 'en-GB', '-live_chat'],  # Prefer English, exclude live chat
                 outtmpl=os.path.join(output_dir, f'{video_id}.%(ext)s'),
                 quiet=False,
             )

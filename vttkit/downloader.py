@@ -13,7 +13,7 @@ from pathlib import Path
 
 import requests
 
-from .youtube import YouTubeClient, is_youtube_url
+from .youtube import YouTubeClient, is_youtube_url, extract_youtube_id
 from .models import DownloadConfig
 
 logger = logging.getLogger(__name__)
@@ -194,9 +194,24 @@ class VTTDownloader:
             # Prepare local directory
             os.makedirs(output_dir, exist_ok=True)
             
+            # Auto-detect YouTube URLs
+            if not is_youtube and is_youtube_url(url):
+                logger.info(f"Auto-detected YouTube URL: {url}")
+                is_youtube = True
+                if not stream_url:
+                    stream_url = url
+            
             # Generate stream_id if not provided
             if not stream_id:
-                stream_id = Path(url).stem or "downloaded"
+                # For YouTube videos, extract video ID for better naming
+                if is_youtube and stream_url:
+                    video_id = extract_youtube_id(stream_url)
+                    if video_id:
+                        stream_id = video_id
+                    else:
+                        stream_id = Path(url).stem or "downloaded"
+                else:
+                    stream_id = Path(url).stem or "downloaded"
             
             # Download new content
             new_content = None
