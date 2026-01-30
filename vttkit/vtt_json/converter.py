@@ -22,6 +22,7 @@ _TIMESTAMP_PATTERN = re.compile(r'(\d+:\d{2}:\d{2}\.\d{3}) --> (\d+:\d{2}:\d{2}\
 _CONTENT_PATTERN = re.compile(r'.*<\d+:\d{2}:\d{2}\.\d{3}>.*')
 _TAG_PATTERN = re.compile(r'<(\d+:\d{2}:\d{2}\.\d{3})><c>([^<]*)</c>')
 _CLEAN_TEXT_PATTERN = re.compile(r'<\d+:\d{2}:\d{2}\.\d{3}>|</?c>')
+_SPEAKER_MARKER_PATTERN = re.compile(r'(^|\s)(>>|&gt;&gt;)\s*')
 
 
 def _resolve_inner_timestamp(tag_timestamp: str, base_seconds: float) -> str:
@@ -330,7 +331,15 @@ def _clean_text(text: str) -> str:
     Returns:
         Clean text without tags
     """
-    return _CLEAN_TEXT_PATTERN.sub('', text)
+    text = _CLEAN_TEXT_PATTERN.sub('', text)
+    return _SPEAKER_MARKER_PATTERN.sub(r'\1', text).strip()
+
+
+def _strip_speaker_markers(text: str) -> str:
+    """
+    Remove speaker markers like '>>' that may prefix cue text.
+    """
+    return _SPEAKER_MARKER_PATTERN.sub(r'\1', text)
 
 
 def _parse_word_timestamps(
@@ -357,6 +366,7 @@ def _parse_word_timestamps(
     Returns:
         List of word dictionaries with 'word' and 'time' keys
     """
+    text_content = _strip_speaker_markers(text_content)
     words_with_timestamps = []
     syllables_in_word = []
     matches = list(_TAG_PATTERN.finditer(text_content))
