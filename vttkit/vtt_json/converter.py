@@ -372,6 +372,35 @@ def _parse_word_timestamps(
             return prefix_tokens[overlap:]
 
         return prefix_tokens
+
+    def _ensure_strictly_increasing_times() -> None:
+        if not rebuild_cues_from_words or len(words_with_timestamps) < 2:
+            return
+
+        def _timestamp_to_millis(timestamp: str) -> int:
+            hours, minutes, seconds = timestamp.split(":")
+            sec, millis = seconds.split(".")
+            total_seconds = int(hours) * 3600 + int(minutes) * 60 + int(sec)
+            return total_seconds * 1000 + int(millis)
+
+        def _millis_to_timestamp(total_millis: int) -> str:
+            hours = total_millis // 3_600_000
+            minutes = (total_millis % 3_600_000) // 60_000
+            seconds = (total_millis % 60_000) // 1000
+            millis = total_millis % 1000
+            hours_str = f"{hours:02d}" if hours < 100 else str(hours)
+            return f"{hours_str}:{minutes:02d}:{seconds:02d}.{millis:03d}"
+
+        max_millis = int(round(cue_end_seconds * 1000))
+        prev_millis = _timestamp_to_millis(words_with_timestamps[0]["time"])
+        for word in words_with_timestamps[1:]:
+            current_millis = _timestamp_to_millis(word["time"])
+            if current_millis <= prev_millis:
+                adjusted_millis = prev_millis + 1
+                if adjusted_millis <= max_millis:
+                    word["time"] = _millis_to_timestamp(adjusted_millis)
+                    current_millis = adjusted_millis
+            prev_millis = current_millis
     
     def finalize_word():
         if not syllables_in_word:
@@ -459,6 +488,8 @@ def _parse_word_timestamps(
                 "word": word,
                 "time": start_time
             })
+
+    _ensure_strictly_increasing_times()
     
     return words_with_timestamps
 
