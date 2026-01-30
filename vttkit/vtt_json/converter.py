@@ -84,12 +84,23 @@ def clean_vtt_content(content: str) -> str:
     # Split content into lines
     lines = content.strip().split('\n')
     
-    # First pass: extract all timestamp and content lines using pre-compiled patterns
+    # First pass: extract timestamp lines and the immediate content lines that follow
     filtered_lines = []
+    previous_was_timestamp = False
     for line in lines:
         line = line.strip()
-        if _TIMESTAMP_PATTERN.match(line) or _CONTENT_PATTERN.search(line):
+        if not line:
+            previous_was_timestamp = False
+            continue
+        if _TIMESTAMP_PATTERN.match(line):
             filtered_lines.append(line)
+            previous_was_timestamp = True
+            continue
+        if previous_was_timestamp or _CONTENT_PATTERN.search(line):
+            filtered_lines.append(line)
+            previous_was_timestamp = False
+            continue
+        previous_was_timestamp = False
     
     # Second pass: remove consecutive timestamps and empty timestamp entries
     cleaned_lines = []
@@ -483,7 +494,10 @@ def _parse_word_timestamps(
     # Fallback: if no words extracted, split clean text by spaces
     if not words_with_timestamps:
         clean_text = _clean_text(text_content)
-        for word in clean_text.strip().split():
+        fallback_tokens = clean_text.strip().split()
+        if rebuild_cues_from_words and has_emitted_words and fallback_tokens:
+            fallback_tokens = _trim_duplicate_prefix(fallback_tokens, keep_last_token=False)
+        for word in fallback_tokens:
             words_with_timestamps.append({
                 "word": word,
                 "time": start_time
