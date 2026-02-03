@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="vttkit",
-    version="0.4.4",
+    version="0.4.5",
     author="VTTKit Contributors",
     description="Complete VTT (WebVTT) processing toolkit with YouTube support",
     long_description=long_description,

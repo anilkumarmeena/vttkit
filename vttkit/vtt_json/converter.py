@@ -84,47 +84,31 @@ def clean_vtt_content(content: str) -> str:
     
     # Split content into lines
     lines = content.strip().split('\n')
-    
-    # First pass: extract timestamp lines and the immediate content lines that follow
-    filtered_lines = []
-    previous_was_timestamp = False
-    for line in lines:
-        line = line.strip()
+
+    # Group consecutive content lines under their timestamp
+    cues: List[Tuple[str, List[str]]] = []
+    current_timestamp: Optional[str] = None
+    current_lines: List[str] = []
+
+    for raw_line in lines:
+        line = raw_line.strip()
         if not line:
-            previous_was_timestamp = False
             continue
         if _TIMESTAMP_PATTERN.match(line):
-            filtered_lines.append(line)
-            previous_was_timestamp = True
+            if current_timestamp and current_lines:
+                cues.append((current_timestamp, current_lines))
+            current_timestamp = line
+            current_lines = []
             continue
-        if previous_was_timestamp or _CONTENT_PATTERN.search(line):
-            filtered_lines.append(line)
-            previous_was_timestamp = False
-            continue
-        previous_was_timestamp = False
-    
-    # Second pass: remove consecutive timestamps and empty timestamp entries
-    cleaned_lines = []
-    i = 0
-    while i < len(filtered_lines):
-        current_line = filtered_lines[i]
-        
-        # If current line is a timestamp
-        if _TIMESTAMP_PATTERN.match(current_line):
-            # Check if there's a next line and it's not another timestamp
-            if i+1 < len(filtered_lines) and not _TIMESTAMP_PATTERN.match(filtered_lines[i+1]):
-                cleaned_lines.append(current_line)
-                cleaned_lines.append(filtered_lines[i+1])
-                i += 2
-            else:
-                # Skip this timestamp if next line is another timestamp or no next line exists
-                i += 1
-        else:
-            # Non-timestamp line (shouldn't normally occur in this flow)
-            i += 1
-    
+        if current_timestamp:
+            current_lines.append(line)
+
+    if current_timestamp and current_lines:
+        cues.append((current_timestamp, current_lines))
+
     # Format the output to be a valid VTT
-    return "WEBVTT\n\n" + "\n\n".join([f"{cleaned_lines[i]}\n{cleaned_lines[i+1]}" for i in range(0, len(cleaned_lines), 2)])
+    blocks = [f"{timestamp}\n" + "\n".join(content_lines) for timestamp, content_lines in cues]
+    return "WEBVTT\n\n" + "\n\n".join(blocks)
 
 
 def split_long_cues(cues: List[Dict[str, Any]], max_duration: float = DEFAULT_MAX_CUE_DURATION) -> List[Dict[str, Any]]:
@@ -434,21 +418,24 @@ def _parse_word_timestamps(
                 "time": middle_timestamp
             })
     
-    inner_base_seconds = cue_start_seconds
+    inner_base_seconds = 0.0
     if matches:
         first_tag_text = matches[0].group(2)
         first_tag_seconds = timestamp_to_seconds(matches[0].group(1))
-        
-        if rebuild_cues_from_words:
-            # Align the first inner timestamp to the cue start for incremental updates
-            inner_base_seconds = cue_start_seconds - first_tag_seconds
+
+        cue_duration = max(0.0, cue_end_seconds - cue_start_seconds)
+        # Detect cue-relative timestamps (typically near zero and before cue start).
+        if first_tag_seconds <= cue_duration + TIMESTAMP_ALIGNMENT_TOLERANCE and (
+            first_tag_seconds < cue_start_seconds - TIMESTAMP_ALIGNMENT_TOLERANCE
+        ):
+            inner_base_seconds = cue_start_seconds
         else:
-            cue_duration = max(0.0, cue_end_seconds - cue_start_seconds)
-            if first_tag_seconds > cue_duration + TIMESTAMP_ALIGNMENT_TOLERANCE:
-                inner_base_seconds = cue_start_seconds - first_tag_seconds
+            inner_base_seconds = 0.0
         
         text_before_first_tag = text_content[:matches[0].start()]
-        text_before_first_tag = text_before_first_tag.replace("\n", " ").rstrip()
+        text_before_first_tag = text_before_first_tag.replace("\n", " ")
+        has_trailing_space_before_tag = bool(text_before_first_tag and text_before_first_tag[-1].isspace())
+        text_before_first_tag = text_before_first_tag.rstrip()
         
         if text_before_first_tag:
             prefix_tokens = text_before_first_tag.split()
@@ -465,14 +452,21 @@ def _parse_word_timestamps(
                             "time": start_time
                         })
                 else:
-                    if len(prefix_tokens) > 1:
-                        for word in prefix_tokens[:-1]:
+                    if has_trailing_space_before_tag:
+                        for word in prefix_tokens:
                             words_with_timestamps.append({
                                 "word": word,
                                 "time": start_time
                             })
-                    if prefix_tokens:
-                        syllables_in_word = [(start_time, prefix_tokens[-1])]
+                    else:
+                        if len(prefix_tokens) > 1:
+                            for word in prefix_tokens[:-1]:
+                                words_with_timestamps.append({
+                                    "word": word,
+                                    "time": start_time
+                                })
+                        if prefix_tokens:
+                            syllables_in_word = [(start_time, prefix_tokens[-1])]
         
         # Process all timestamp + text pairs
         for match in matches:
